@@ -16,7 +16,7 @@
     </div>
 
     <div class="service-list">
-      <div class="service-card" v-for="service in services" :key="service.id">
+      <div class="service-card card card-md card-shadow-md" v-for="service in services" :key="service.id">
         <div class="service-header">
           <div class="service-icon">{{ service.icon }}</div>
           <h3 class="service-title">{{ service.title }}</h3>
@@ -201,11 +201,7 @@ export default {
 }
 
 .service-card {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
   margin-bottom: 15px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 
 .service-header {

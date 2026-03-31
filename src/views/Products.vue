@@ -16,7 +16,7 @@
     </div>
 
     <div class="products-list" :class="{ 'in-home': !showHeader }">
-      <div class="product-item" v-for="product in products" :key="product.id">
+      <div class="product-item card card-md card-shadow-md" v-for="product in products" :key="product.id">
         <div class="product-icon">{{ product.icon || '🌾' }}</div>
         <div class="product-content">
           <h3 class="product-name">{{ product.name }}</h3>

@@ -16,7 +16,7 @@
     </div>
 
     <div class="contact-info">
-      <div class="info-card">
+      <div class="info-card card card-md card-shadow-md">
         <div class="info-item">
           <div class="info-icon">📍</div>
           <div class="info-content">
@@ -229,10 +229,7 @@ export default {
 }
 
 .info-card {
-  background: white;
-  border-radius: 12px;
   padding: 10px 0;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 
 .info-item {

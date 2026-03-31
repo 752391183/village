@@ -16,7 +16,7 @@
     </div>
 
     <div class="news-list">
-      <div class="news-item" v-for="item in news" :key="item.id" @click="goToDetail(item.id)">
+      <div class="news-item card card-md card-shadow-md" v-for="item in news" :key="item.id" @click="goToDetail(item.id)">
         <div class="news-image">
           <img :src="item.image" :alt="item.title">
         </div>

@@ -50,7 +50,7 @@
     </div>
 
     <div class="banquet-list">
-      <div class="banquet-card" v-for="banquet in filteredBanquets" :key="banquet.id">
+      <div class="banquet-card card card-md card-shadow-md" v-for="banquet in filteredBanquets" :key="banquet.id">
         <div class="card-header">
           <div class="type-badge" :class="banquet.type">{{ banquet.type }}</div>
           <div class="status-badge" :class="banquet.status">{{ banquet.status }}</div>
