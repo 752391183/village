@@ -130,10 +130,16 @@
                   <stop offset="100%" style="stop-color:#667eea;stop-opacity:0.8" />
                 </linearGradient>
                 <linearGradient id="highlightedLinkGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" style="stop-color:#002fa7;stop-opacity:1" />
-                  <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+                  <stop offset="0%" style="stop-color:#cbd5e0;stop-opacity:1" />
+                  <stop offset="100%" style="stop-color:#a0aec0;stop-opacity:1" />
                 </linearGradient>
               </defs>
+
+              <!-- 背景网格 -->
+              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#f0f0f0" stroke-width="1"/>
+              </pattern>
+              <rect width="100%" height="100%" fill="url(#grid)" />
 
               <g class="links">
                 <polyline
@@ -154,43 +160,38 @@
                   :class="{ 
                     highlighted: isNodeHighlighted(node),
                     selected: selectedNode?.id === node.id,
-                    queried: queriedIds.has(node.id),
                     searchResult: searchResultIds.has(node.id)
                   }"
                   @click="handleNodeClick(node)"
                   @mouseenter="handleNodeHover(node)"
                   @mouseleave="handleNodeLeave"
                 >
-                  <!-- 节点卡片 -->
+                  <!-- 节点卡片 - 参考图片样式 -->
                   <rect
-                    x="-64"
-                    y="-4"
-                    width="128"
-                    height="106"
-                    rx="22"
+                    x="-60"
+                    y="-10"
+                    width="120"
+                    height="140"
+                    rx="12"
                     class="node-card"
-                    :class="{ 
-                      'node-card-male': node.gender === '男',
-                      'node-card-female': node.gender === '女',
-                      'node-card-selected': selectedNode?.id === node.id,
-                      'node-card-queried': queriedIds.has(node.id),
-                      'node-card-search-result': searchResultIds.has(node.id)
-                    }"
                   />
+                  <!-- 头像圆格 -->
                   <circle
                     cx="0"
-                    cy="18"
-                    r="22"
-                    class="node-avatar-ring"
-                    :class="{ 
-                      'node-avatar-ring-male': node.gender === '男',
-                      'node-avatar-ring-female': node.gender === '女'
-                    }"
+                    cy="25"
+                    r="28"
+                    class="node-avatar-bg"
                   />
-                  <text class="node-avatar" text-anchor="middle" x="0" y="25">{{ node.avatar }}</text>
-                  <text class="node-name" text-anchor="middle" x="0" y="58">{{ node.name }}</text>
-                  <text class="node-meta" text-anchor="middle" x="0" y="78">{{ getNodeSubtitle(node) }}</text>
-                  <text v-if="node.relationToQuery" class="node-relation-chip" text-anchor="middle" x="0" y="94">{{ node.relationToQuery }}</text>
+                  <text class="node-avatar" text-anchor="middle" x="0" y="34">{{ node.avatar }}</text>
+                  
+                  <!-- 姓名 - 黑色粗体 -->
+                  <text class="node-name" text-anchor="middle" x="0" y="75">{{ node.name }}</text>
+                  
+                  <!-- 称谓 - 蓝色 -->
+                  <text class="node-title" text-anchor="middle" x="0" y="95">{{ getNodeTitle(node) }}</text>
+                  
+                  <!-- 年份 - 灰色 -->
+                  <text class="node-years" text-anchor="middle" x="0" y="115">{{ getNodeYears(node) }}</text>
                 </g>
               </g>
             </svg>
@@ -399,7 +400,7 @@ export default {
         this.width = this.svgWidth
 
         if (this.visibleNodes.length > 0) {
-          this.layoutNodes(this.visibleNodes)
+          // 只调整 SVG 高度，不再触发 layoutNodes 以防点击节点时布局跳变
           this.adjustSvgHeight()
         }
       }
@@ -612,8 +613,10 @@ export default {
       })
 
       const totalTreeWidth = maxNodesPerGeneration * nodeWidth + (maxNodesPerGeneration - 1) * horizontalGap
-      const startX = Math.max(this.svgWidth / 2, totalTreeWidth / 2 + 72)
-      let currentY = 72 * this.zoomLevel
+      
+      // 使用更稳定的基准点，只有第一次或重置时才使用 svgWidth/2
+      const startX = Math.max(1000, totalTreeWidth / 2 + 72)
+      let currentY = 100
 
       generations.forEach(gen => {
         const genNodes = generationMap.get(gen)
@@ -662,8 +665,11 @@ export default {
     },
     handleNodeClick(node) {
       this.selectedNode = node
-      if (!this.queriedIds.has(node.id)) {
-        this.queryNode(node, false)
+      // 移除自动扩展 queryNode，解决点击弹开的问题
+    },
+    expandSelectedNode() {
+      if (this.selectedNode && !this.queriedIds.has(this.selectedNode.id)) {
+        this.queryNode(this.selectedNode, false)
       }
     },
     handleNodeHover(node) {
@@ -681,11 +687,11 @@ export default {
     },
     getNodeTopAnchor(id) {
       const node = this.getSafeNode(id)
-      return { x: node.x, y: node.y - 4 }
+      return { x: node.x, y: node.y - 10 }
     },
     getNodeBottomAnchor(id) {
       const node = this.getSafeNode(id)
-      return { x: node.x, y: node.y + 102 }
+      return { x: node.x, y: node.y + 130 }
     },
     getLinkPoints(link) {
       const source = this.getNodeBottomAnchor(link.source)
@@ -695,6 +701,22 @@ export default {
     },
     getNodeSubtitle(node) {
       return `${node.gender} · ${node.age}岁`
+    },
+    getNodeTitle(node) {
+      // 根据 generation 返回称谓
+      const titles = {
+        0: '长辈',
+        1: '父辈',
+        2: '我辈',
+        3: '子辈',
+        4: '孙辈'
+      }
+      return titles[node.generation] || '家族成员'
+    },
+    getNodeYears(node) {
+      // 模拟年份数据
+      const startYear = 1940 + (4 - node.generation) * 20
+      return `${startYear} - ${node.age > 70 ? 2020 : ''}`
     },
     getNodeColor(node) {
       if (this.searchResultIds.has(node.id)) {
@@ -1307,6 +1329,17 @@ export default {
   background: rgba(255, 250, 240, 0.96);
 }
 
+/* 族谱树标题描边效果 */
+.network-stage-copy h2 {
+  margin: 0;
+  font-size: 40px;
+  line-height: 1;
+  color: #2F2618;
+  font-weight: 900;
+  -webkit-text-stroke: 2px #FFFFFF;
+  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
 .zoom-controls {
   display: flex;
   gap: 10px;
@@ -1435,96 +1468,70 @@ export default {
 }
 .link {
   fill: none;
-  stroke: #d7d2cb;
-  stroke-width: 2.5;
+  stroke: #E2E8F0;
+  stroke-width: 1.5;
   transition: all 0.3s ease;
-  opacity: 0.9;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
-.link:hover {
-  stroke: #d3aa69;
-  stroke-width: 3;
-}
-
 .link.highlighted {
-  stroke: #d3aa69;
-  stroke-width: 3.5;
-  opacity: 1;
-  filter: drop-shadow(0 0 8px rgba(211, 170, 105, 0.35));
+  stroke: #3182CE;
+  stroke-width: 2;
 }
 
 .node {
   cursor: pointer;
-  transition: transform 0.2s ease-out;
 }
 
-.node:hover {
-  transform: scale(1.03);
+/* 移除 scale 效果，防止 hover 时碰撞盒变化导致的震动 */
+.node:hover .node-card {
+  stroke: #3182CE;
+  stroke-width: 2;
+  filter: drop-shadow(0 8px 24px rgba(49, 130, 206, 0.15));
 }
 
 .node-card {
-  fill: rgba(255, 255, 255, 0.98);
-  stroke: rgba(228, 221, 210, 0.98);
-  stroke-width: 1.4;
-  filter: drop-shadow(0 12px 24px rgba(168, 160, 148, 0.16));
-  transition: all 0.25s ease;
+  fill: #FFFFFF;
+  stroke: #E2E8F0;
+  stroke-width: 1;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.05));
 }
 
-.node-card-selected {
-  stroke: #d3aa69;
-  stroke-width: 2.4;
-  filter: drop-shadow(0 14px 24px rgba(211, 170, 105, 0.22));
-}
-
-.node-card-queried {
-  stroke: #f0bc72;
+.node.selected .node-card {
+  stroke: #3182CE;
   stroke-width: 2;
+  filter: drop-shadow(0 4px 16px rgba(49, 130, 206, 0.2));
 }
 
-.node-card-search-result {
-  stroke: #ff9c5b;
-  stroke-width: 2.6;
-}
-
-.node-avatar-ring {
-  stroke: #ffffff;
+.node-avatar-bg {
+  fill: #EDF2F7;
+  stroke: #FFFFFF;
   stroke-width: 3;
-  filter: drop-shadow(0 6px 12px rgba(216, 109, 167, 0.24));
-}
-
-.node-avatar-ring-male {
-  fill: url(#maleGradient);
-}
-
-.node-avatar-ring-female {
-  fill: url(#femaleGradient);
 }
 
 .node-avatar {
-  font-size: 22px;
+  font-size: 28px;
   pointer-events: none;
 }
 
 .node-name {
-  font-size: 14px;
-  fill: #2b2b2b;
-  font-weight: 700;
+  font-size: 16px;
+  fill: #1A202C;
+  font-weight: 800;
   pointer-events: none;
 }
 
-.node-meta {
-  font-size: 10px;
-  fill: #8f8a81;
-  font-weight: 500;
+.node-title {
+  font-size: 13px;
+  fill: #3182CE;
+  font-weight: 600;
   pointer-events: none;
 }
 
-.node-relation-chip {
-  font-size: 9px;
-  fill: #7d5c2e;
-  font-weight: 700;
+.node-years {
+  font-size: 11px;
+  fill: #A0AEC0;
   pointer-events: none;
 }
 .legend-section {
