@@ -15,7 +15,7 @@
       </div>
     </div>
 
-    <div class="genealogy-section">
+    <div class="genealogy-section" v-if="!isMobile">
       <div class="genealogy-card">
         <div class="genealogy-title">字辈（派语）</div>
         <div class="genealogy-content">
@@ -42,7 +42,7 @@
       </div>
     </div>
 
-    <div v-if="!hasQueried && !isLoading" class="guide-section">
+    <div v-if="!hasQueried && !isLoading && !isMobile" class="guide-section">
       <div class="guide-card">
         <div class="guide-icon">🔍</div>
         <h3>欢迎使用关系查询</h3>
@@ -97,7 +97,18 @@
           <div class="network-shell-glow glow-right"></div>
           <div class="network-watermark">族谱树</div>
           <div class="network-guide-chip">横向滚动查看完整谱系，点击节点查看关系</div>
-          <div class="network-container" ref="containerRef" @wheel="handleWheel" @mousedown="handleMouseDown" @mousemove="handleMouseMove" @mouseup="handleMouseUp" @mouseleave="handleMouseUp">
+          <div 
+            class="network-container" 
+            ref="containerRef" 
+            @wheel="handleWheel" 
+            @mousedown="handleMouseDown" 
+            @mousemove="handleMouseMove" 
+            @mouseup="handleMouseUp" 
+            @mouseleave="handleMouseUp"
+            @touchstart="handleTouchStart"
+            @touchmove="handleTouchMove"
+            @touchend="handleTouchEnd"
+          >
             <svg 
               ref="svgRef" 
               class="network-svg"
@@ -223,7 +234,7 @@
         </div>
       </div>
 
-      <div class="tips-section">
+      <div class="tips-section" v-if="!isMobile">
         <div class="tips-card">
           <div class="tips-icon">💡</div>
           <h3>使用提示</h3>
@@ -237,27 +248,31 @@
       </div>
     </div>
 
-    <div class="info-panel" v-if="selectedNode">
+    <div class="info-panel" v-if="selectedNode" :class="{ 'mobile-sheet': isMobile }">
       <div class="info-card">
+        <div class="info-drag-handle" v-if="isMobile"></div>
         <div class="info-header">
-          <h3>人物详情</h3>
+          <h3>人员详情</h3>
           <button class="close-btn" @click="selectedNode = null">×</button>
         </div>
-        <div class="node-detail">
-          <div class="detail-avatar">{{ selectedNode.avatar }}</div>
-          <h4>{{ selectedNode.name }}</h4>
-          <p class="detail-info">{{ selectedNode.gender }} · {{ selectedNode.age }}岁 · {{ getAgeGroup(selectedNode.age) }}</p>
-          <div class="relations">
-            <h5>亲属关系：</h5>
-            <ul>
-              <li v-for="(rel, idx) in getNodeRelations(selectedNode.id)" :key="idx">
-                {{ rel }}
-              </li>
-            </ul>
+        <!-- 增加滚动容器 -->
+        <div class="info-content-scroll">
+          <div class="node-detail">
+            <div class="detail-avatar">{{ selectedNode.avatar }}</div>
+            <h4>{{ selectedNode.name }}</h4>
+            <p class="detail-info">{{ selectedNode.gender }} · {{ selectedNode.age }}岁 · {{ getAgeGroup(selectedNode.age) }}</p>
+            <div class="relations">
+              <h5>亲属关系：</h5>
+              <ul>
+                <li v-for="(rel, idx) in getNodeRelations(selectedNode.id)" :key="idx">
+                  {{ rel }}
+                </li>
+              </ul>
+            </div>
+            <button class="expand-btn" @click="expandSelectedNode">
+              扩展亲属关系
+            </button>
           </div>
-          <button class="expand-btn" @click="expandSelectedNode">
-            扩展亲属关系
-          </button>
         </div>
       </div>
     </div>
@@ -275,10 +290,10 @@ export default {
       allLinks: [],
       visibleNodes: [],
       visibleLinks: [],
-      width: 400,
-      height: 500,
-      svgWidth: 400,
-      svgHeight: 1000,
+      width: 5000,
+      height: 5000,
+      svgWidth: 5000,
+      svgHeight: 5000,
       selectedNode: null,
       searchName: '',
       isLoading: false,
@@ -287,6 +302,7 @@ export default {
       searchResultIds: new Set(),
       hoveredNode: null,
       zoomLevel: 1,
+      isMobile: false,
       baseNodeWidth: 168,
       baseNodeHeight: 156,
       translateX: 0,
@@ -303,11 +319,15 @@ export default {
   },
   mounted() {
     this.initFamilyTree()
+    this.checkMobile()
     this.adjustSize()
     this.loadTopLevelNodes()
     
     // 使用节流函数优化resize事件处理
-    this.throttledAdjustSize = this.throttle(this.adjustSize, 100)
+    this.throttledAdjustSize = this.throttle(() => {
+      this.checkMobile()
+      this.adjustSize()
+    }, 100)
     window.addEventListener('resize', this.throttledAdjustSize)
     
     // 添加滚动事件监听
@@ -343,6 +363,10 @@ export default {
     loadTopLevelNodes() {
       this.isLoading = true
       
+      if (this.isMobile) {
+        this.zoomLevel = 0.7
+      }
+      
       setTimeout(() => {
         const topLevelNodes = this.allNodes.filter(node => node.generation === 0)
         
@@ -373,37 +397,27 @@ export default {
           this.visibleNodes = allHierarchyNodes
           this.updateVisibleLinks()
           
-          this.layoutNodes(this.visibleNodes)
-          this.adjustSvgHeight()
-          this.hasQueried = true
-        }
+        this.layoutNodes(this.visibleNodes)
+        this.adjustSvgHeight()
+        this.hasQueried = true
         
-        this.isLoading = false
-      }, 500)
+        // 加载完成后自动对焦，稍微延迟确保容器尺寸已稳定
+        setTimeout(() => {
+          this.$nextTick(() => {
+            this.autoFit()
+          })
+        }, 100)
+      }
+        
+      this.isLoading = false
+    }, 800) // 稍微延长 loading 时间，等待布局稳定
     },
     adjustSize() {
-      const container = this.$refs.containerRef
-      if (container) {
-        const nodeWidth = this.baseNodeWidth * this.zoomLevel
-        const horizontalGap = 30 * this.zoomLevel
-        const maxNodesPerGeneration = this.visibleNodes.length > 0
-          ? Math.max(...Object.values(this.visibleNodes.reduce((acc, node) => {
-              if (!acc[node.generation]) acc[node.generation] = 0
-              acc[node.generation]++
-              return acc
-            }, {})))
-          : 1
-
-        const contentWidth = maxNodesPerGeneration * nodeWidth + (maxNodesPerGeneration - 1) * horizontalGap
-        const requiredWidth = contentWidth + 220
-        this.svgWidth = Math.max(container.clientWidth, requiredWidth)
-        this.width = this.svgWidth
-
-        if (this.visibleNodes.length > 0) {
-          // 只调整 SVG 高度，不再触发 layoutNodes 以防点击节点时布局跳变
-          this.adjustSvgHeight()
-        }
-      }
+      this.checkMobile()
+      // 现在画布已固化大底座，不再手动重算 svgWidth，避免键盘弹出干扰
+    },
+    checkMobile() {
+      this.isMobile = window.innerWidth <= 768
     },
     getAgeGroup(age) {
       if (age >= 60) return '老人'
@@ -449,6 +463,13 @@ export default {
           this.layoutNodes(this.visibleNodes)
           this.adjustSvgHeight()
           this.hasQueried = true
+
+          // 查询后确保自动对焦，延迟确保 DOM 渲染完成
+          this.$nextTick(() => {
+            setTimeout(() => {
+              this.autoFit()
+            }, 150)
+          })
         } else {
           alert('未找到该人员，请检查姓名是否正确')
           this.searchResultIds.clear()
@@ -585,14 +606,19 @@ export default {
       this.layoutNodes(this.visibleNodes, targetNode)
       this.adjustSvgHeight()
       this.hasQueried = true
+      
+      // 扩展节点后自动对焦，确保新节点可见
+      this.$nextTick(() => {
+        this.autoFit()
+      })
     },
     layoutNodes(nodes, targetNode = null) {
       if (this.isScrolling) return
 
-      const nodeWidth = this.baseNodeWidth * this.zoomLevel
-      const nodeHeight = this.baseNodeHeight * this.zoomLevel
-      const horizontalGap = 30 * this.zoomLevel
-      const verticalGap = 62 * this.zoomLevel
+      const nodeWidth = this.baseNodeWidth
+      const nodeHeight = this.baseNodeHeight
+      const horizontalGap = 30
+      const verticalGap = 62
 
       const generationMap = new Map()
       nodes.forEach(node => {
@@ -614,9 +640,8 @@ export default {
 
       const totalTreeWidth = maxNodesPerGeneration * nodeWidth + (maxNodesPerGeneration - 1) * horizontalGap
       
-      // 使用更稳定的基准点，只有第一次或重置时才使用 svgWidth/2
-      const startX = Math.max(1000, totalTreeWidth / 2 + 72)
-      let currentY = 100
+      const startX = 2500 // 固定画布中心起始点
+      let currentY = 200
 
       generations.forEach(gen => {
         const genNodes = generationMap.get(gen)
@@ -632,12 +657,7 @@ export default {
       })
     },
     adjustSvgHeight() {
-      if (this.visibleNodes.length === 0) {
-        this.svgHeight = 560
-        return
-      }
-      const maxY = Math.max(...this.visibleNodes.map(n => n.y))
-      this.svgHeight = maxY + this.baseNodeHeight * this.zoomLevel + 120
+      // 现在的画布已固化大底座，如果需要特定逻辑可以放这
     },
     getParents(nodeId) {
       const parents = []
@@ -687,11 +707,11 @@ export default {
     },
     getNodeTopAnchor(id) {
       const node = this.getSafeNode(id)
-      return { x: node.x, y: node.y - 10 }
+      return { x: node.x, y: node.y - 12 }
     },
     getNodeBottomAnchor(id) {
       const node = this.getSafeNode(id)
-      return { x: node.x, y: node.y + 130 }
+      return { x: node.x, y: node.y + 144 }
     },
     getLinkPoints(link) {
       const source = this.getNodeBottomAnchor(link.source)
@@ -797,29 +817,103 @@ export default {
       this.translateX = 0
       this.translateY = 0
       this.loadTopLevelNodes()
+      
+      // 重置后自动对焦
+      this.$nextTick(() => {
+        this.autoFit()
+      })
+    },
+    autoFit() {
+      if (this.visibleNodes.length === 0) return
+      
+      const container = this.$refs.containerRef
+      if (!container || container.clientWidth === 0 || container.clientHeight === 0) {
+        setTimeout(() => this.autoFit(), 100)
+        return
+      }
+
+      // 1. 获取全景观包围盒 (BBox) - 增加坐标过滤
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+      let validNodes = 0
+
+      this.visibleNodes.forEach(node => {
+        if (typeof node.x === 'number' && typeof node.y === 'number' && !isNaN(node.x) && !isNaN(node.y)) {
+          if (node.x < minX) minX = node.x
+          if (node.x > maxX) maxX = node.x
+          if (node.y < minY) minY = node.y
+          if (node.y > maxY) maxY = node.y
+          validNodes++
+        }
+      })
+
+      if (validNodes === 0) {
+        this.translateX = 0
+        this.translateY = 0
+        this.zoomLevel = 1
+        return
+      }
+
+      // 考虑卡片自身的真实宽度
+      const contentWidth = (maxX - minX) + this.baseNodeWidth
+      const contentHeight = (maxY - minY) + this.baseNodeHeight
+      
+      const padding = this.isMobile ? 30 : 60
+      const availWidth = container.clientWidth - padding * 2
+      const availHeight = container.clientHeight - padding * 2
+
+      // 2. 计算缩放比例
+      let targetZoom = Math.min(availWidth / contentWidth, availHeight / contentHeight)
+      targetZoom = Math.max(0.25, Math.min(targetZoom, 1.0))
+      this.zoomLevel = targetZoom
+
+      // 3. 居中计算：将逻辑中心点与容器中心点对齐
+      const logicCenterX = minX + contentWidth / 2
+      const logicCenterY = minY + contentHeight / 2
+      
+      // 增加溢出保护，确保居中坐标不是极端大数
+      const targetX = container.clientWidth / 2 - (logicCenterX * this.zoomLevel)
+      const targetY = container.clientHeight / 2 - (logicCenterY * this.zoomLevel)
+      
+      this.translateX = isNaN(targetX) ? 0 : targetX
+      this.translateY = isNaN(targetY) ? 0 : targetY
+    },
+    // 核心缩放算法：支持以特定点为中心进行缩放
+    updateZoom(newZoom, anchorX, anchorY) {
+      const oldZoom = this.zoomLevel
+      const zoomThreshold = 0.15
+      
+      // 限制缩放区间
+      newZoom = Math.max(0.2, Math.min(newZoom, 2.0))
+      
+      if (newZoom === oldZoom) return
+
+      // 核心补偿公式：
+      // 新位移 = 锚点 - (锚点 - 旧位移) * (新缩放 / 旧缩放)
+      this.translateX = anchorX - (anchorX - this.translateX) * (newZoom / oldZoom)
+      this.translateY = anchorY - (anchorY - this.translateY) * (newZoom / oldZoom)
+      this.zoomLevel = newZoom
     },
     zoomIn() {
-      if (this.zoomLevel < 2) {
-        this.zoomLevel += 0.2
-        this.layoutNodes(this.visibleNodes)
-        this.adjustSvgHeight()
-      }
+      const container = this.$refs.containerRef
+      if (!container) return
+      this.updateZoom(this.zoomLevel + 0.15, container.clientWidth / 2, container.clientHeight / 2)
     },
     zoomOut() {
-      if (this.zoomLevel > 0.6) {
-        this.zoomLevel -= 0.2
-        this.layoutNodes(this.visibleNodes)
-        this.adjustSvgHeight()
-      }
+      const container = this.$refs.containerRef
+      if (!container) return
+      this.updateZoom(this.zoomLevel - 0.15, container.clientWidth / 2, container.clientHeight / 2)
     },
     handleWheel(event) {
       event.preventDefault()
+      const container = this.$refs.containerRef
+      if (!container) return
+
+      const rect = container.getBoundingClientRect()
+      const mouseX = event.clientX - rect.left
+      const mouseY = event.clientY - rect.top
+      
       const delta = event.deltaY > 0 ? -0.1 : 0.1
-      if (this.zoomLevel + delta >= 0.6 && this.zoomLevel + delta <= 2) {
-        this.zoomLevel += delta
-        this.layoutNodes(this.visibleNodes)
-        this.adjustSvgHeight()
-      }
+      this.updateZoom(this.zoomLevel + delta, mouseX, mouseY)
     },
     handleMouseDown(event) {
       this.isDragging = true
@@ -832,11 +926,45 @@ export default {
       if (this.isDragging) {
         const deltaX = event.clientX - this.startX
         const deltaY = event.clientY - this.startY
-        this.translateX = this.startTranslateX + deltaX
-        this.translateY = this.startTranslateY + deltaY
+        
+        let nextTranslateX = this.startTranslateX + deltaX
+        let nextTranslateY = this.startTranslateY + deltaY
+        
+        // 电子围栏：限制位移防止消失，并处理 NaN
+        if (isFinite(nextTranslateX) && isFinite(nextTranslateY)) {
+          this.translateX = Math.max(-5000, Math.min(5000, nextTranslateX))
+          this.translateY = Math.max(-5000, Math.min(5000, nextTranslateY))
+        }
       }
     },
     handleMouseUp() {
+      this.isDragging = false
+    },
+    handleTouchStart(event) {
+      if (event.touches.length === 1) {
+        this.isDragging = true
+        this.startX = event.touches[0].clientX
+        this.startY = event.touches[0].clientY
+        this.startTranslateX = this.translateX
+        this.startTranslateY = this.translateY
+      }
+    },
+    handleTouchMove(event) {
+      if (this.isDragging && event.touches.length === 1) {
+        const deltaX = event.touches[0].clientX - this.startX
+        const deltaY = event.touches[0].clientY - this.startY
+
+        let nextTranslateX = this.startTranslateX + deltaX
+        let nextTranslateY = this.startTranslateY + deltaY
+
+        // 电子围栏：限制位移防止消失，并处理 NaN
+        if (isFinite(nextTranslateX) && isFinite(nextTranslateY)) {
+          this.translateX = Math.max(-5000, Math.min(5000, nextTranslateX))
+          this.translateY = Math.max(-5000, Math.min(5000, nextTranslateY))
+        }
+      }
+    },
+    handleTouchEnd() {
       this.isDragging = false
     },
     
@@ -886,8 +1014,12 @@ export default {
 
 <style scoped>
 .relationship {
-  padding-bottom: 30px;
-  min-height: 100vh;
+  height: 100vh;
+  background-color: #f8fafc;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* 防止页面整体滚动 */
 }
 
 .page-header {
@@ -1228,6 +1360,10 @@ export default {
 
 .network-section {
   padding: 0 16px 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .network-stage {
@@ -1240,6 +1376,9 @@ export default {
     linear-gradient(180deg, #f9f5ee 0%, #f5efe6 42%, #f2ebdf 100%);
   border: 1px solid rgba(148, 163, 184, 0.18);
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .network-stage::before {
@@ -1383,10 +1522,13 @@ export default {
   z-index: 1;
   padding: 18px;
   border-radius: 26px;
-  overflow: visible;
+  overflow: hidden;
   background: linear-gradient(180deg, #f8f5ef 0%, #f6f2ea 100%);
   border: 1px solid rgba(225, 218, 207, 0.92);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .network-guide-chip {
@@ -1403,14 +1545,20 @@ export default {
 
 .network-container {
   position: relative;
-  overflow: auto;
-  max-height: 640px;
+  overflow: hidden; /* 改为 hidden，由于支持平移，无需原生滚动条 */
+  flex: 1;
   width: 100%;
+  height: 100%;
+  min-height: 400px;
   border-radius: 24px;
   border: 1px solid rgba(226, 219, 208, 0.96);
   background: #fffdfa;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.98);
   cursor: grab;
+  
+  /* 隐藏滚动条 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
 }
 
 .network-container:active {
@@ -1418,44 +1566,12 @@ export default {
 }
 
 .network-container::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  display: none; /* Chrome, Safari and Opera */
 }
 
-.network-container::-webkit-scrollbar-track {
-  background: rgba(230, 230, 230, 0.6);
-  border-radius: 999px;
-  margin: 10px;
-}
+/* 移除旧的滚动条样式 */
 
-.network-container::-webkit-scrollbar-thumb {
-  background: rgba(171, 180, 196, 0.9);
-  border-radius: 999px;
-}
-
-.network-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(140, 149, 164, 1);
-}
-
-.network-container::-moz-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.network-container::-moz-scrollbar-track {
-  background: rgba(230, 230, 230, 0.6);
-  border-radius: 999px;
-  margin: 10px;
-}
-
-.network-container::-moz-scrollbar-thumb {
-  background: rgba(171, 180, 196, 0.9);
-  border-radius: 999px;
-}
-
-.network-container::-moz-scrollbar-thumb:hover {
-  background: rgba(140, 149, 164, 1);
-}
+/* 移除旧的滚动条样式 */
 
 .network-svg {
   position: relative;
@@ -1465,6 +1581,7 @@ export default {
   padding: 30px 44px 40px;
   background: #fffdfa;
   transition: transform 0.1s ease;
+  transform-origin: 0 0; /* 极其重要：确保缩放和位移基准点一致 */
 }
 .link {
   fill: none;
@@ -1649,8 +1766,27 @@ export default {
   bottom: 80px;
   left: 15px;
   right: 15px;
-  z-index: 1000;
-  animation: slideUp 0.3s ease;
+  z-index: 2050; /* 提升层级，确保在导航栏之上 */
+  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.info-content-scroll {
+  max-height: 60vh; /* 限制高度，支持滚动 */
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.info-content-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.info-drag-handle {
+  width: 40px;
+  height: 4px;
+  background: #e2e8f0;
+  border-radius: 2px;
+  margin: 0 auto 12px;
 }
 
 @-webkit-keyframes slideUp {
@@ -1826,67 +1962,133 @@ export default {
 }
 
 @media (max-width: 768px) {
-  .network-stage {
-    padding: 18px;
-    border-radius: 22px;
+  .relationship {
+    height: 100vh;
+    overflow: hidden;
+  }
+  
+  .page-header {
+    padding: 10px 15px;
+  }
+  
+  .page-header h1 {
+    font-size: 20px;
+    margin: 5px 0;
+  }
+  
+  .header-content {
+    padding: 0;
+  }
+  
+  .header-icon, .header-label, .header-divider, .header-subtitle, .header-decoration {
+    display: none;
   }
 
-  .network-stage-head {
-    flex-direction: column;
+  .network-stage {
+    padding: 8px;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .network-stage-copy p {
+    display: none;
   }
 
   .network-stage-copy h2 {
-    font-size: 34px;
+    font-size: 18px;
+    margin-bottom: 4px;
+  }
+
+  .network-stage-head {
+    gap: 8px;
+    padding-bottom: 5px;
   }
 
   .toolbar {
     width: 100%;
-    align-items: stretch;
+    padding: 4px 8px;
+    border-radius: 8px;
+    gap: 5px;
   }
 
   .toolbar-info {
-    justify-content: flex-start;
+    font-size: 10px;
+    gap: 8px;
   }
 
   .zoom-controls {
-    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .zoom-btn {
+    height: 30px;
+    font-size: 12px;
   }
 
   .network-shell {
-    padding: 94px 12px 12px;
+    padding: 5px;
+    border-radius: 12px;
   }
 
   .network-watermark {
-    top: 22px;
-    left: 18px;
-    font-size: 34px;
-  }
-
-  .network-guide-chip {
-    top: 72px;
-    left: 18px;
-    right: auto;
-    max-width: calc(100% - 36px);
+    display: none;
   }
 
   .network-container {
-    max-height: 420px;
+    height: 100%;
+    max-height: none;
+    border-radius: 10px;
+  }
+  
+  .info-panel {
+    bottom: 0;
+    left: 0;
+    right: 0;
+    animation: slideUpBottom 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  .network-svg {
-    padding: 108px 22px 36px;
+  .info-card {
+    border-radius: 20px 20px 0 0;
+    padding: 16px 20px;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
   }
-  
-  .genealogy-content {
-    font-size: 16px;
+
+  .node-detail {
+    padding: 10px 0;
   }
-  
-  .page-header h1 {
-    font-size: 28px;
+
+  .detail-avatar {
+    width: 50px;
+    height: 50px;
+    font-size: 24px;
+    margin-bottom: 8px;
   }
-  
-  .header-icon {
-    font-size: 36px;
+
+  .relations {
+    margin-top: 10px;
+  }
+
+  .relations h5 {
+    font-size: 14px;
+  }
+
+  .relations li {
+    font-size: 13px;
+    padding: 6px 0;
+  }
+
+  .expand-btn {
+    padding: 12px;
+    margin-top: 12px;
+  }
+}
+
+@keyframes slideUpBottom {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
   }
 }
 
