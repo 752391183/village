@@ -64,17 +64,36 @@
     <div class="content-section">
       <h2 class="section-title">村庄风采</h2>
       <div class="gallery">
-        <div class="gallery-item">
-          <img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=village%20cultural%20square%20with%20people%20dancing&image_size=square" alt="文化广场">
+        <div class="gallery-item" v-for="photo in displayedPhotos" :key="photo.id" @click="openPreview(photo.id)">
+          <img :src="photo.url" :alt="photo.alt">
+          <div class="gallery-item-overlay">
+            <div class="gallery-item-caption">{{ photo.caption }}</div>
+          </div>
         </div>
-        <div class="gallery-item">
-          <img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20village%20community%20center&image_size=square" alt="社区中心">
+      </div>
+      <div class="load-more" v-if="displayedPhotos.length < photos.length">
+        <button class="load-btn" @click="loadMore" :disabled="loading">
+          <span v-if="loading">加载中...</span>
+          <span v-else>加载更多</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 图片预览模态框 -->
+    <div class="preview-modal" v-if="previewVisible" @click="closePreview">
+      <div class="preview-content" @click.stop>
+        <button class="preview-close" @click="closePreview">×</button>
+        <div class="preview-image-container">
+          <button class="preview-nav preview-nav-left" @click="prevPhoto" v-if="currentPreviewIndex > 0">←</button>
+          <img :src="currentPhoto.url" :alt="currentPhoto.alt" class="preview-image" ref="previewImage">
+          <button class="preview-nav preview-nav-right" @click="nextPhoto" v-if="currentPreviewIndex < displayedPhotos.length - 1">→</button>
         </div>
-        <div class="gallery-item">
-          <img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=agricultural%20greenhouses%20in%20village&image_size=square" alt="农业大棚">
-        </div>
-        <div class="gallery-item">
-          <img src="https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=beautiful%20countryside%20road%20with%20trees&image_size=square" alt="乡村道路">
+        <div class="preview-caption">{{ currentPhoto.caption }}</div>
+        <div class="preview-info">{{ currentPreviewIndex + 1 }} / {{ displayedPhotos.length }}</div>
+        <div class="preview-controls">
+          <button class="preview-control-btn" @click="zoomIn">放大</button>
+          <button class="preview-control-btn" @click="zoomOut">缩小</button>
+          <button class="preview-control-btn" @click="resetZoom">重置</button>
         </div>
       </div>
     </div>
@@ -89,7 +108,89 @@ export default {
   data() {
     return {
       village: mockData.village,
-      overview: mockData.overview
+      overview: mockData.overview,
+      photos: mockData.photos,
+      displayedPhotos: [],
+      loading: false,
+      loadStep: 4,
+      previewVisible: false,
+      currentPreviewIndex: 0,
+      zoomLevel: 1
+    }
+  },
+  mounted() {
+    this.loadInitialPhotos()
+  },
+  computed: {
+    currentPhoto() {
+      return this.displayedPhotos[this.currentPreviewIndex]
+    }
+  },
+  methods: {
+    loadInitialPhotos() {
+      this.displayedPhotos = this.photos.slice(0, this.loadStep)
+    },
+    loadMore() {
+      if (this.loading) return
+      
+      this.loading = true
+      
+      // 模拟加载延迟
+      setTimeout(() => {
+        const nextPhotos = this.photos.slice(
+          this.displayedPhotos.length,
+          this.displayedPhotos.length + this.loadStep
+        )
+        this.displayedPhotos = [...this.displayedPhotos, ...nextPhotos]
+        this.loading = false
+      }, 800)
+    },
+    openPreview(photoId) {
+      const index = this.displayedPhotos.findIndex(photo => photo.id === photoId)
+      if (index !== -1) {
+        this.currentPreviewIndex = index
+        this.zoomLevel = 1
+        this.previewVisible = true
+        document.body.style.overflow = 'hidden'
+      }
+    },
+    closePreview() {
+      this.previewVisible = false
+      this.zoomLevel = 1
+      document.body.style.overflow = ''
+    },
+    prevPhoto() {
+      if (this.currentPreviewIndex > 0) {
+        this.currentPreviewIndex--
+        this.zoomLevel = 1
+      }
+    },
+    nextPhoto() {
+      if (this.currentPreviewIndex < this.displayedPhotos.length - 1) {
+        this.currentPreviewIndex++
+        this.zoomLevel = 1
+      }
+    },
+    zoomIn() {
+      if (this.zoomLevel < 2) {
+        this.zoomLevel += 0.2
+        this.updateZoom()
+      }
+    },
+    zoomOut() {
+      if (this.zoomLevel > 0.6) {
+        this.zoomLevel -= 0.2
+        this.updateZoom()
+      }
+    },
+    resetZoom() {
+      this.zoomLevel = 1
+      this.updateZoom()
+    },
+    updateZoom() {
+      if (this.$refs.previewImage) {
+        this.$refs.previewImage.style.transform = `scale(${this.zoomLevel})`
+      }
     }
   }
 }
@@ -385,6 +486,8 @@ export default {
   height: 160px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  cursor: pointer;
 }
 
 .gallery-item:hover {
@@ -401,5 +504,262 @@ export default {
 
 .gallery-item:hover img {
   transform: scale(1.1);
+}
+
+.gallery-item-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+  padding: 16px 12px 12px;
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+}
+
+.gallery-item:hover .gallery-item-overlay {
+  transform: translateY(0);
+}
+
+.gallery-item-caption {
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.load-more {
+  margin-top: 24px;
+  text-align: center;
+}
+
+.load-btn {
+  padding: 12px 32px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 100px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.load-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+}
+
+.load-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* 预览模态框 */
+.preview-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.preview-content {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: white;
+  border-radius: 20px;
+  overflow: hidden;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(50px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.preview-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  font-size: 24px;
+  cursor: pointer;
+  color: #333;
+  z-index: 10;
+  transition: all 0.3s ease;
+}
+
+.preview-close:hover {
+  background: rgba(0, 0, 0, 0.2);
+  transform: scale(1.1);
+}
+
+.preview-image-container {
+  position: relative;
+  max-width: 80vw;
+  max-height: 70vh;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  transition: transform 0.3s ease;
+}
+
+.preview-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 50px;
+  height: 50px;
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  font-size: 24px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  z-index: 5;
+}
+
+.preview-nav:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.preview-nav-left {
+  left: 16px;
+}
+
+.preview-nav-right {
+  right: 16px;
+}
+
+.preview-caption {
+  padding: 20px 24px 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  text-align: center;
+}
+
+.preview-info {
+  padding: 0 24px 16px;
+  font-size: 14px;
+  color: #666;
+  text-align: center;
+}
+
+.preview-controls {
+  display: flex;
+  gap: 12px;
+  padding: 0 24px 20px;
+}
+
+.preview-control-btn {
+  padding: 8px 16px;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.preview-control-btn:hover {
+  background: #e0e0e0;
+  transform: translateY(-2px);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .gallery {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  
+  .gallery-item {
+    height: 140px;
+  }
+  
+  .preview-content {
+    max-width: 95vw;
+    max-height: 95vh;
+  }
+  
+  .preview-image-container {
+    max-width: 90vw;
+    max-height: 60vh;
+  }
+  
+  .preview-nav {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+  
+  .preview-caption {
+    font-size: 14px;
+    padding: 16px 20px 8px;
+  }
+  
+  .preview-info {
+    font-size: 12px;
+    padding: 0 20px 12px;
+  }
+  
+  .preview-controls {
+    padding: 0 20px 16px;
+    gap: 8px;
+  }
+  
+  .preview-control-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .gallery {
+    grid-template-columns: 1fr;
+  }
+  
+  .gallery-item {
+    height: 200px;
+  }
+  
+  .load-btn {
+    padding: 10px 24px;
+    font-size: 13px;
+  }
 }
 </style>

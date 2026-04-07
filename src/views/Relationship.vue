@@ -77,16 +77,19 @@
           <span>关系 {{ visibleLinks.length }} 条</span>
         </div>
         <div class="zoom-controls">
+          <button @click="zoomIn" class="zoom-btn" title="放大">+</button>
+          <button @click="zoomOut" class="zoom-btn" title="缩小">-</button>
           <button @click="resetView" class="zoom-btn reset" title="重置">⟲</button>
         </div>
       </div>
 
-      <div class="network-container" ref="containerRef">
+      <div class="network-container" ref="containerRef" @wheel="handleWheel" @mousedown="handleMouseDown" @mousemove="handleMouseMove" @mouseup="handleMouseUp" @mouseleave="handleMouseUp">
         <svg 
           ref="svgRef" 
           class="network-svg"
           :width="svgWidth"
           :height="svgHeight"
+          :style="{ transform: `translate(${translateX}px, ${translateY}px) scale(${zoomLevel})` }"
         >
           <defs>
             <filter id="nodeShadow" x="-50%" y="-50%" width="200%" height="200%">
@@ -112,6 +115,10 @@
               <stop offset="0%" style="stop-color:#a0aec0;stop-opacity:0.8" />
               <stop offset="100%" style="stop-color:#667eea;stop-opacity:0.8" />
             </linearGradient>
+            <linearGradient id="highlightedLinkGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" style="stop-color:#002fa7;stop-opacity:1" />
+              <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+            </linearGradient>
           </defs>
 
           <g class="links">
@@ -136,18 +143,31 @@
               :class="{ 
                 highlighted: isNodeHighlighted(node),
                 selected: selectedNode?.id === node.id,
-                queried: queriedIds.has(node.id)
+                queried: queriedIds.has(node.id),
+                searchResult: searchResultIds.has(node.id)
               }"
               @click="handleNodeClick(node)"
+              @mouseenter="handleNodeHover(node)"
+              @mouseleave="handleNodeLeave"
             >
+              <!-- 节点圆圈 -->
               <circle 
-                :r="getNodeRadius(node)" 
+                r="30" 
                 class="node-circle"
-                :fill="getNodeColor(node)"
+                :class="{ 
+                  'node-male': node.gender === '男',
+                  'node-female': node.gender === '女',
+                  'node-selected': selectedNode?.id === node.id,
+                  'node-queried': queriedIds.has(node.id),
+                  'node-search-result': searchResultIds.has(node.id)
+                }"
               />
+              
+              <!-- 节点内容 -->
               <text class="node-avatar" text-anchor="middle" dy="0.35em">{{ node.avatar }}</text>
               <text class="node-name" text-anchor="middle" dy="3.5em">{{ node.name }}</text>
-              <text class="node-age" text-anchor="middle" dy="5em">{{ getAgeGroup(node.age) }} · {{ node.gender === '男' ? '♂' : '♀' }}</text>
+              <text class="node-age" text-anchor="middle" dy="5em">{{ node.age }}岁 · {{ node.gender === '男' ? '男' : '女' }}</text>
+              <text v-if="node.relationToQuery" class="node-relation" text-anchor="middle" dy="6.5em">{{ node.relationToQuery }}</text>
             </g>
           </g>
         </svg>
@@ -162,6 +182,18 @@
           <span class="legend-dot female"></span>
           <span>女性</span>
         </div>
+        <div class="legend-item">
+          <span class="legend-dot queried"></span>
+          <span>查询对象</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-dot selected"></span>
+          <span>当前选中</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-dot search-result"></span>
+          <span>搜索结果</span>
+        </div>
       </div>
 
       <div class="tips-section">
@@ -172,6 +204,7 @@
             <li>点击节点可扩展该人物的上三代和下三代亲属</li>
             <li>滚动查看更多节点</li>
             <li>年龄分类：儿童(0-12)、少年(13-17)、青年(18-40)、中年(41-59)、老人(60+)</li>
+            <li>搜索结果会高亮显示，并突出相关联的节点和连接线</li>
           </ul>
         </div>
       </div>
@@ -223,16 +256,52 @@ export default {
       searchName: '',
       isLoading: false,
       hasQueried: false,
-      queriedIds: new Set()
+      queriedIds: new Set(),
+      searchResultIds: new Set(),
+      hoveredNode: null,
+      zoomLevel: 1,
+      baseNodeWidth: 100,
+      baseNodeHeight: 180,
+      translateX: 0,
+      translateY: 0,
+      isDragging: false,
+      startX: 0,
+      startY: 0,
+      startTranslateX: 0,
+      startTranslateY: 0,
+      // 性能优化相关
+      isScrolling: false,
+      scrollTimeout: null
     }
   },
   mounted() {
     this.initFamilyTree()
     this.adjustSize()
-    window.addEventListener('resize', this.adjustSize)
+    this.loadTopLevelNodes()
+    
+    // 使用节流函数优化resize事件处理
+    this.throttledAdjustSize = this.throttle(this.adjustSize, 100)
+    window.addEventListener('resize', this.throttledAdjustSize)
+    
+    // 添加滚动事件监听器
+    const container = this.$refs.containerRef
+    if (container) {
+      container.addEventListener('scroll', this.handleScroll)
+    }
   },
   beforeUnmount() {
-    window.removeEventListener('resize', this.adjustSize)
+    window.removeEventListener('resize', this.throttledAdjustSize)
+    
+    // 移除滚动事件监听器
+    const container = this.$refs.containerRef
+    if (container) {
+      container.removeEventListener('scroll', this.handleScroll)
+    }
+    
+    // 清除定时器
+    if (this.scrollTimeout) {
+      clearTimeout(this.scrollTimeout)
+    }
   },
   methods: {
     initFamilyTree() {
@@ -244,11 +313,68 @@ export default {
       }))
       this.allLinks = mockData.relationshipNetwork.links
     },
+    loadTopLevelNodes() {
+      this.isLoading = true
+      
+      setTimeout(() => {
+        const topLevelNodes = this.allNodes.filter(node => node.generation === 0)
+        
+        if (topLevelNodes.length > 0) {
+          // 递归加载所有层级节点
+          const allHierarchyNodes = []
+          const visited = new Set()
+          
+          const loadAllNodes = (nodes) => {
+            nodes.forEach(node => {
+              if (!visited.has(node.id)) {
+                visited.add(node.id)
+                allHierarchyNodes.push(node)
+                node.relationToQuery = node.generation === 0 ? '祖先' : '家族成员'
+                this.queriedIds.add(node.id)
+                
+                // 加载子节点
+                const children = this.getChildren(node.id)
+                if (children.length > 0) {
+                  loadAllNodes(children)
+                }
+              }
+            })
+          }
+          
+          loadAllNodes(topLevelNodes)
+          
+          this.visibleNodes = allHierarchyNodes
+          this.updateVisibleLinks()
+          
+          this.layoutNodes(this.visibleNodes)
+          this.adjustSvgHeight()
+          this.hasQueried = true
+        }
+        
+        this.isLoading = false
+      }, 500)
+    },
     adjustSize() {
       const container = this.$refs.containerRef
       if (container) {
-        this.svgWidth = Math.min(container.clientWidth, 600)
+        // 计算所需的最小宽度，确保树形结构完整显示
+        const nodeWidth = this.baseNodeWidth * this.zoomLevel
+        const maxNodesPerGeneration = this.visibleNodes.length > 0 
+          ? Math.max(...Object.values(this.visibleNodes.reduce((acc, node) => {
+              if (!acc[node.generation]) acc[node.generation] = 0
+              acc[node.generation]++
+              return acc
+            }, {})).map(count => count))
+          : 1
+        
+        const requiredWidth = maxNodesPerGeneration * nodeWidth + 120 // 120px 边距
+        this.svgWidth = Math.max(container.clientWidth, requiredWidth)
         this.width = this.svgWidth
+        
+        if (this.visibleNodes.length > 0) {
+          this.layoutNodes(this.visibleNodes)
+          this.adjustSvgHeight()
+        }
       }
     },
     getAgeGroup(age) {
@@ -260,31 +386,93 @@ export default {
     },
     handleSearch() {
       if (!this.searchName.trim()) {
+        this.searchResultIds.clear()
         return
       }
 
       this.isLoading = true
-      this.hasQueried = false
 
       setTimeout(() => {
-        const targetNode = this.allNodes.find(n => n.name.includes(this.searchName.trim()))
+        const searchResults = this.allNodes.filter(n => n.name.includes(this.searchName.trim()))
         
-        if (targetNode) {
-          this.queryNode(targetNode, true)
+        if (searchResults.length > 0) {
+          this.searchResultIds = new Set(searchResults.map(node => node.id))
+          
+          // 确保搜索结果和相关节点都可见
+          const allRelatedNodeIds = new Set(this.searchResultIds)
+          
+          searchResults.forEach(node => {
+            if (!this.visibleNodes.find(n => n.id === node.id)) {
+              this.visibleNodes.push(node)
+              this.queriedIds.add(node.id)
+            }
+            
+            // 获取所有相关节点
+            const relatedNodes = this.getRelatedNodes(node.id)
+            relatedNodes.forEach(relatedNode => {
+              if (!this.visibleNodes.find(n => n.id === relatedNode.id)) {
+                this.visibleNodes.push(relatedNode)
+              }
+              allRelatedNodeIds.add(relatedNode.id)
+            })
+          })
+          
+          this.updateVisibleLinks()
+          this.layoutNodes(this.visibleNodes)
+          this.adjustSvgHeight()
+          this.hasQueried = true
         } else {
           alert('未找到该人员，请检查姓名是否正确')
+          this.searchResultIds.clear()
         }
         
         this.isLoading = false
-      }, 500)
+      }, 300)
+    },
+    getRelatedNodes(nodeId) {
+      const relatedNodes = []
+      const visited = new Set()
+      const queue = [nodeId]
+      
+      while (queue.length > 0) {
+        const currentId = queue.shift()
+        if (visited.has(currentId)) continue
+        
+        visited.add(currentId)
+        
+        const parents = this.getParents(currentId)
+        const children = this.getChildren(currentId)
+        
+        parents.forEach(parent => {
+          if (!visited.has(parent.id)) {
+            relatedNodes.push(parent)
+            queue.push(parent.id)
+          }
+        })
+        
+        children.forEach(child => {
+          if (!visited.has(child.id)) {
+            relatedNodes.push(child)
+            queue.push(child.id)
+          }
+        })
+      }
+      
+      return relatedNodes
+    },
+    updateVisibleLinks() {
+      const nodeIds = new Set(this.visibleNodes.map(node => node.id))
+      this.visibleLinks = this.allLinks.filter(link => 
+        nodeIds.has(link.source) && nodeIds.has(link.target)
+      )
     },
     queryNode(targetNode, isInitial = false) {
       const relatedNodeIds = new Set([targetNode.id])
       const newVisibleNodes = [targetNode]
-      const newVisibleLinks = []
       
       if (isInitial) {
         this.queriedIds = new Set([targetNode.id])
+        this.searchResultIds.clear()
       } else {
         this.queriedIds.add(targetNode.id)
       }
@@ -300,7 +488,6 @@ export default {
           parent.relationToQuery = '父辈'
           newVisibleNodes.push(parent)
           relatedNodeIds.add(parent.id)
-          newVisibleLinks.push(this.getLink(parent.id, targetNode.id))
           
           const gps = this.getParents(parent.id)
           gps.forEach(gp => {
@@ -308,7 +495,6 @@ export default {
               gp.relationToQuery = '祖父辈'
               grandparents.push(gp)
               relatedNodeIds.add(gp.id)
-              newVisibleLinks.push(this.getLink(gp.id, parent.id))
               
               const ggps = this.getParents(gp.id)
               ggps.forEach(ggp => {
@@ -316,7 +502,6 @@ export default {
                   ggp.relationToQuery = '曾祖父辈'
                   greatGrandparents.push(ggp)
                   relatedNodeIds.add(ggp.id)
-                  newVisibleLinks.push(this.getLink(ggp.id, gp.id))
                 }
               })
             }
@@ -335,7 +520,6 @@ export default {
           child.relationToQuery = '子辈'
           newVisibleNodes.push(child)
           relatedNodeIds.add(child.id)
-          newVisibleLinks.push(this.getLink(targetNode.id, child.id))
           
           const gcs = this.getChildren(child.id)
           gcs.forEach(gc => {
@@ -343,7 +527,6 @@ export default {
               gc.relationToQuery = '孙辈'
               grandchildren.push(gc)
               relatedNodeIds.add(gc.id)
-              newVisibleLinks.push(this.getLink(child.id, gc.id))
               
               const ggcs = this.getChildren(gc.id)
               ggcs.forEach(ggc => {
@@ -351,7 +534,6 @@ export default {
                   ggc.relationToQuery = '曾孙辈'
                   greatGrandchildren.push(ggc)
                   relatedNodeIds.add(ggc.id)
-                  newVisibleLinks.push(this.getLink(gc.id, ggc.id))
                 }
               })
             }
@@ -361,63 +543,76 @@ export default {
       
       newVisibleNodes.push(...grandchildren, ...greatGrandchildren)
 
-      this.layoutNodes(newVisibleNodes, targetNode)
-
       if (isInitial) {
         this.visibleNodes = newVisibleNodes
-        this.visibleLinks = newVisibleLinks
       } else {
         newVisibleNodes.forEach(node => {
           if (!this.visibleNodes.find(n => n.id === node.id)) {
             this.visibleNodes.push(node)
           }
         })
-        newVisibleLinks.forEach(link => {
-          if (link && !this.visibleLinks.find(l => 
-            (l.source === link.source && l.target === link.target) ||
-            (l.source === link.target && l.target === link.source)
-          )) {
-            this.visibleLinks.push(link)
-          }
-        })
-        this.layoutNodes(this.visibleNodes, targetNode)
       }
-
-      this.hasQueried = true
+      
+      this.updateVisibleLinks()
+      this.layoutNodes(this.visibleNodes, targetNode)
       this.adjustSvgHeight()
+      this.hasQueried = true
     },
-    layoutNodes(nodes, targetNode) {
-      const generationMap = {}
+    layoutNodes(nodes, targetNode = null) {
+      // 避免在滚动时进行布局计算
+      if (this.isScrolling) return
+      
+      // 使用对象解构和缓存提高性能
+      const nodeWidth = 120 * this.zoomLevel
+      const nodeHeight = 80 * this.zoomLevel
+      const nodeSpacing = 40 * this.zoomLevel
+      
+      // 构建世代映射，使用Map提高性能
+      const generationMap = new Map()
       nodes.forEach(node => {
         const gen = node.generation
-        if (!generationMap[gen]) {
-          generationMap[gen] = []
+        if (!generationMap.has(gen)) {
+          generationMap.set(gen, [])
         }
-        generationMap[gen].push(node)
+        generationMap.get(gen).push(node)
       })
 
-      const generations = Object.keys(generationMap).map(Number).sort((a, b) => a - b)
-      const nodeWidth = 100
-      const nodeHeight = 160
-      const startX = this.svgWidth / 2
-      let currentY = 60
+      // 排序世代，确保从上往下展示
+      const generations = Array.from(generationMap.keys()).sort((a, b) => a - b)
+      
+      // 计算每个世代的宽度，确保树形结构均匀分布
+      let maxNodesPerGeneration = 1
+      generationMap.forEach(nodes => {
+        if (nodes.length > maxNodesPerGeneration) {
+          maxNodesPerGeneration = nodes.length
+        }
+      })
+      
+      const totalTreeWidth = maxNodesPerGeneration * (nodeWidth + nodeSpacing) - nodeSpacing
+      const startX = Math.max(this.svgWidth / 2, totalTreeWidth / 2)
+      let currentY = 80 * this.zoomLevel
 
+      // 批量更新节点位置，减少DOM操作
       generations.forEach(gen => {
-        const genNodes = generationMap[gen]
-        const totalWidth = genNodes.length * nodeWidth
-        const startXOffset = startX - totalWidth / 2 + nodeWidth / 2
+        const genNodes = generationMap.get(gen)
+        const totalWidth = genNodes.length * (nodeWidth + nodeSpacing) - nodeSpacing
+        const startXOffset = startX - totalWidth / 2 + (nodeWidth + nodeSpacing) / 2
         
         genNodes.forEach((node, index) => {
-          node.x = startXOffset + index * nodeWidth
+          node.x = startXOffset + index * (nodeWidth + nodeSpacing)
           node.y = currentY
         })
         
-        currentY += nodeHeight
+        currentY += nodeHeight + nodeSpacing
       })
     },
     adjustSvgHeight() {
+      if (this.visibleNodes.length === 0) {
+        this.svgHeight = 500
+        return
+      }
       const maxY = Math.max(...this.visibleNodes.map(n => n.y))
-      this.svgHeight = maxY + 120
+      this.svgHeight = maxY + 120 * this.zoomLevel
     },
     getParents(nodeId) {
       const parents = []
@@ -443,17 +638,17 @@ export default {
       })
       return children
     },
-    getLink(sourceId, targetId) {
-      return this.allLinks.find(l => 
-        (l.source === sourceId && l.target === targetId) ||
-        (l.source === targetId && l.target === sourceId)
-      )
-    },
     handleNodeClick(node) {
       this.selectedNode = node
       if (!this.queriedIds.has(node.id)) {
         this.queryNode(node, false)
       }
+    },
+    handleNodeHover(node) {
+      this.hoveredNode = node
+    },
+    handleNodeLeave() {
+      this.hoveredNode = null
     },
     getNodeById(id) {
       return this.visibleNodes.find(n => n.id === id) || this.allNodes.find(n => n.id === id)
@@ -462,10 +657,10 @@ export default {
       const node = this.getNodeById(id)
       return node || { x: 0, y: 0 }
     },
-    getNodeRadius(node) {
-      return 30
-    },
     getNodeColor(node) {
+      if (this.searchResultIds.has(node.id)) {
+        return 'url(#queriedGradient)'
+      }
       if (this.selectedNode?.id === node.id) {
         return 'url(#nodeGradient)'
       }
@@ -478,21 +673,33 @@ export default {
       return 'url(#femaleGradient)'
     },
     isNodeHighlighted(node) {
+      if (this.searchResultIds.has(node.id)) return true
+      if (this.hoveredNode) {
+        return this.visibleLinks.some(link => 
+          (link.source === this.hoveredNode.id && link.target === node.id) ||
+          (link.target === this.hoveredNode.id && link.source === node.id)
+        )
+      }
       if (!this.selectedNode) return false
       if (this.selectedNode?.id === node.id) return true
       
-      if (this.selectedNode) {
-        return this.visibleLinks.some(link => 
-          (link.source === this.selectedNode.id && link.target === node.id) ||
-          (link.target === this.selectedNode.id && link.source === node.id)
-        )
-      }
-      
-      return false
+      return this.visibleLinks.some(link => 
+        (link.source === this.selectedNode.id && link.target === node.id) ||
+        (link.target === this.selectedNode.id && link.source === node.id)
+      )
     },
     isLinkHighlighted(link) {
-      if (!this.selectedNode) return false
+      // 搜索结果相关联的连接线高亮
+      if (this.searchResultIds.has(link.source) || this.searchResultIds.has(link.target)) {
+        return true
+      }
       
+      // 悬停节点相关联的连接线高亮
+      if (this.hoveredNode) {
+        return link.source === this.hoveredNode.id || link.target === this.hoveredNode.id
+      }
+      
+      // 选中节点相关联的连接线高亮
       if (this.selectedNode) {
         return link.source === this.selectedNode.id || link.target === this.selectedNode.id
       }
@@ -521,8 +728,96 @@ export default {
       this.visibleLinks = []
       this.hasQueried = false
       this.queriedIds = new Set()
+      this.searchResultIds = new Set()
       this.selectedNode = null
       this.searchName = ''
+      this.hoveredNode = null
+      this.zoomLevel = 1
+      this.translateX = 0
+      this.translateY = 0
+      this.loadTopLevelNodes()
+    },
+    zoomIn() {
+      if (this.zoomLevel < 2) {
+        this.zoomLevel += 0.2
+        this.layoutNodes(this.visibleNodes)
+        this.adjustSvgHeight()
+      }
+    },
+    zoomOut() {
+      if (this.zoomLevel > 0.6) {
+        this.zoomLevel -= 0.2
+        this.layoutNodes(this.visibleNodes)
+        this.adjustSvgHeight()
+      }
+    },
+    handleWheel(event) {
+      event.preventDefault()
+      const delta = event.deltaY > 0 ? -0.1 : 0.1
+      if (this.zoomLevel + delta >= 0.6 && this.zoomLevel + delta <= 2) {
+        this.zoomLevel += delta
+        this.layoutNodes(this.visibleNodes)
+        this.adjustSvgHeight()
+      }
+    },
+    handleMouseDown(event) {
+      this.isDragging = true
+      this.startX = event.clientX
+      this.startY = event.clientY
+      this.startTranslateX = this.translateX
+      this.startTranslateY = this.translateY
+    },
+    handleMouseMove(event) {
+      if (this.isDragging) {
+        const deltaX = event.clientX - this.startX
+        const deltaY = event.clientY - this.startY
+        this.translateX = this.startTranslateX + deltaX
+        this.translateY = this.startTranslateY + deltaY
+      }
+    },
+    handleMouseUp() {
+      this.isDragging = false
+    },
+    
+    // 节流函数，用于优化滚动和调整大小的事件处理
+    throttle(fn, delay) {
+      let timer = null
+      return function() {
+        if (!timer) {
+          timer = setTimeout(() => {
+            fn.apply(this, arguments)
+            timer = null
+          }, delay)
+        }
+      }
+    },
+    
+    // 优化布局计算，避免不必要的重计算
+    optimizeLayout() {
+      if (this.visibleNodes.length > 0) {
+        // 使用requestAnimationFrame优化渲染
+        requestAnimationFrame(() => {
+          this.layoutNodes(this.visibleNodes)
+          this.adjustSvgHeight()
+        })
+      }
+    },
+    
+    // 处理滚动事件，用于虚拟滚动
+    handleScroll(event) {
+      if (this.isScrolling) return
+      
+      this.isScrolling = true
+      
+      // 清除之前的定时器
+      if (this.scrollTimeout) {
+        clearTimeout(this.scrollTimeout)
+      }
+      
+      // 设置新的定时器
+      this.scrollTimeout = setTimeout(() => {
+        this.isScrolling = false
+      }, 100)
     }
   }
 }
@@ -531,6 +826,7 @@ export default {
 <style scoped>
 .relationship {
   padding-bottom: 30px;
+  min-height: 100vh;
 }
 
 .page-header {
@@ -584,18 +880,30 @@ export default {
 
 @keyframes drift {
   0%, 100% {
+    -webkit-transform: translate(0, 0) scale(1);
+    -moz-transform: translate(0, 0) scale(1);
+    -ms-transform: translate(0, 0) scale(1);
     transform: translate(0, 0) scale(1);
     opacity: 0.5;
   }
   25% {
+    -webkit-transform: translate(10px, -10px) scale(1.1);
+    -moz-transform: translate(10px, -10px) scale(1.1);
+    -ms-transform: translate(10px, -10px) scale(1.1);
     transform: translate(10px, -10px) scale(1.1);
     opacity: 0.7;
   }
   50% {
+    -webkit-transform: translate(0, -20px) scale(1);
+    -moz-transform: translate(0, -20px) scale(1);
+    -ms-transform: translate(0, -20px) scale(1);
     transform: translate(0, -20px) scale(1);
     opacity: 0.6;
   }
   75% {
+    -webkit-transform: translate(-10px, -10px) scale(0.9);
+    -moz-transform: translate(-10px, -10px) scale(0.9);
+    -ms-transform: translate(-10px, -10px) scale(0.9);
     transform: translate(-10px, -10px) scale(0.9);
     opacity: 0.8;
   }
@@ -610,14 +918,45 @@ export default {
   font-size: 48px;
   margin-bottom: 12px;
   display: inline-block;
+  -webkit-animation: bounce 2s ease-in-out infinite;
+  -moz-animation: bounce 2s ease-in-out infinite;
+  -ms-animation: bounce 2s ease-in-out infinite;
   animation: bounce 2s ease-in-out infinite;
+}
+
+@-webkit-keyframes bounce {
+  0%, 100% {
+    -webkit-transform: translateY(0);
+    transform: translateY(0);
+  }
+  50% {
+    -webkit-transform: translateY(-8px);
+    transform: translateY(-8px);
+  }
+}
+
+@-moz-keyframes bounce {
+  0%, 100% {
+    -moz-transform: translateY(0);
+    transform: translateY(0);
+  }
+  50% {
+    -moz-transform: translateY(-8px);
+    transform: translateY(-8px);
+  }
 }
 
 @keyframes bounce {
   0%, 100% {
+    -webkit-transform: translateY(0);
+    -moz-transform: translateY(0);
+    -ms-transform: translateY(0);
     transform: translateY(0);
   }
   50% {
+    -webkit-transform: translateY(-8px);
+    -moz-transform: translateY(-8px);
+    -ms-transform: translateY(-8px);
     transform: translateY(-8px);
   }
 }
@@ -664,6 +1003,12 @@ export default {
   padding: 24px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
   text-align: center;
+  transition: all 0.3s ease;
+}
+
+.genealogy-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 .genealogy-title {
@@ -696,6 +1041,11 @@ export default {
   padding: 16px;
   border-radius: 16px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+}
+
+.search-box-wrapper:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 .search-input {
@@ -745,6 +1095,12 @@ export default {
   padding: 40px 24px;
   text-align: center;
   border: 2px dashed #002fa7;
+  transition: all 0.3s ease;
+}
+
+.guide-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 47, 167, 0.1);
 }
 
 .guide-icon {
@@ -781,6 +1137,12 @@ export default {
   padding: 16px 20px;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: all 0.3s ease;
+}
+
+.tip-item:hover {
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
 }
 
 .tip-number {
@@ -818,8 +1180,16 @@ export default {
   margin: 0 auto 20px;
 }
 
+@-webkit-keyframes spin {
+  to { -webkit-transform: rotate(360deg); transform: rotate(360deg); }
+}
+
+@-moz-keyframes spin {
+  to { -moz-transform: rotate(360deg); transform: rotate(360deg); }
+}
+
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to { -webkit-transform: rotate(360deg); -moz-transform: rotate(360deg); -ms-transform: rotate(360deg); transform: rotate(360deg); }
 }
 
 .loading-section p {
@@ -841,6 +1211,11 @@ export default {
   border-radius: 16px;
   margin-bottom: 16px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+}
+
+.toolbar:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 .toolbar-info {
@@ -855,6 +1230,11 @@ export default {
   background: #f7fafc;
   border-radius: 100px;
   font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.toolbar-info span:hover {
+  background: #e2e8f0;
 }
 
 .zoom-controls {
@@ -879,6 +1259,11 @@ export default {
 .zoom-btn:hover {
   border-color: #002fa7;
   background: #f7fafc;
+  transform: scale(1.05);
+}
+
+.zoom-btn:active {
+  transform: scale(0.95);
 }
 
 .zoom-btn.reset {
@@ -887,78 +1272,231 @@ export default {
 
 .network-container {
   position: relative;
-  overflow-y: auto;
-  max-height: 600px;
+  overflow: auto;
+  max-height: 700px;
   border-radius: 20px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+  background: white;
+  cursor: grab;
+}
+
+.network-container:active {
+  cursor: grabbing;
+}
+
+/* 自定义滚动条样式 */
+.network-container::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.network-container::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 10px;
+  margin: 10px;
+}
+
+.network-container::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+  transition: all 0.3s ease;
+}
+
+.network-container::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.network-container::-moz-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.network-container::-moz-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 10px;
+  margin: 10px;
+}
+
+.network-container::-moz-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+  transition: all 0.3s ease;
+}
+
+.network-container::-moz-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 .network-svg {
-  width: 100%;
+  min-width: 100%;
   background: white;
   display: block;
+  border-radius: 20px;
+  padding: 20px;
+  transition: transform 0.1s ease;
 }
 
 .link {
   stroke: url(#linkGradient);
   stroke-width: 2;
-  transition: all 0.3s;
+  transition: all 0.3s ease;
+  opacity: 0.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.link:hover {
+  stroke-width: 3;
+  opacity: 0.9;
+  stroke: url(#highlightedLinkGradient);
 }
 
 .link.highlighted {
-  stroke: #002fa7;
-  stroke-width: 3;
+  stroke: url(#highlightedLinkGradient);
+  stroke-width: 4;
   opacity: 1;
+  stroke-dasharray: 8;
+  stroke-dashoffset: 0;
+  animation: pulse 2s ease-in-out infinite, dash 3s linear infinite;
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+
+@-webkit-keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@-moz-keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 
 .node {
   cursor: pointer;
+  -webkit-transition: all 0.2s ease-out;
+  -moz-transition: all 0.2s ease-out;
   transition: all 0.2s ease-out;
 }
 
-.node:hover .node-circle {
-  stroke-width: 5;
+.node:hover {
+  -webkit-transform: scale(1.05);
+  -moz-transform: scale(1.05);
+  -ms-transform: scale(1.05);
+  transform: scale(1.05);
 }
 
-.node.selected .node-circle {
+.node-circle {
+  stroke: white;
+  stroke-width: 2;
+  transition: all 0.2s ease;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+}
+
+.node-male {
+  fill: url(#maleGradient);
+}
+
+.node-female {
+  fill: url(#femaleGradient);
+}
+
+.node-selected {
   stroke: #002fa7;
   stroke-width: 4;
   filter: url(#nodeShadow);
 }
 
-.node.highlighted .node-circle {
-  stroke: #002fa7;
-  stroke-width: 3;
-}
-
-.node.queried .node-circle {
+.node-queried {
   stroke: #f093fb;
   stroke-width: 4;
 }
 
-.node-circle {
-  stroke: white;
-  stroke-width: 3;
-  transition: all 0.2s ease-out;
+.node-search-result {
+  stroke: #f97316;
+  stroke-width: 5;
+  animation: pulse 2s ease-in-out infinite;
 }
 
 .node-avatar {
   font-size: 24px;
   pointer-events: none;
+  -webkit-transition: all 0.3s ease;
+  -moz-transition: all 0.3s ease;
+  transition: all 0.3s ease;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  fill: white;
+}
+
+.node:hover .node-avatar {
+  font-size: 28px;
+  -webkit-transform: scale(1.1);
+  -moz-transform: scale(1.1);
+  -ms-transform: scale(1.1);
+  transform: scale(1.1);
 }
 
 .node-name {
-  font-size: 11px;
+  font-size: 12px;
   fill: #2d3748;
   font-weight: 600;
   pointer-events: none;
+  transition: all 0.3s ease;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.node:hover .node-name {
+  font-size: 13px;
+  font-weight: 700;
+  fill: #002fa7;
 }
 
 .node-age {
-  font-size: 9px;
+  font-size: 10px;
   fill: #002fa7;
   font-weight: 500;
   pointer-events: none;
+  transition: all 0.3s ease;
+}
+
+.node:hover .node-age {
+  fill: #3b82f6;
+  font-weight: 600;
+}
+
+.node-relation {
+  font-size: 9px;
+  fill: #718096;
+  font-weight: 500;
+  pointer-events: none;
+  font-style: italic;
+  transition: all 0.3s ease;
+}
+
+.node:hover .node-relation {
+  fill: #4a5568;
 }
 
 .legend-section {
@@ -971,6 +1509,11 @@ export default {
   border-radius: 16px;
   margin-top: 16px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+}
+
+.legend-section:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 .legend-item {
@@ -979,12 +1522,23 @@ export default {
   gap: 8px;
   font-size: 13px;
   color: #666;
+  transition: all 0.3s ease;
+}
+
+.legend-item:hover {
+  color: #002fa7;
+  transform: translateY(-2px);
 }
 
 .legend-dot {
   width: 16px;
   height: 16px;
   border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.legend-item:hover .legend-dot {
+  transform: scale(1.2);
 }
 
 .legend-dot.queried {
@@ -1003,6 +1557,10 @@ export default {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
+.legend-dot.search-result {
+  background: linear-gradient(135deg, #f97316 0%, #fb923c 100%);
+}
+
 .tips-section {
   padding: 0;
   margin-top: 16px;
@@ -1013,6 +1571,12 @@ export default {
   border-radius: 16px;
   padding: 20px;
   border-left: 4px solid #002fa7;
+  transition: all 0.3s ease;
+}
+
+.tips-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 47, 167, 0.1);
 }
 
 .tips-icon {
@@ -1037,6 +1601,12 @@ export default {
   color: #4a5568;
   margin-bottom: 6px;
   line-height: 1.6;
+  transition: all 0.3s ease;
+}
+
+.tips-card li:hover {
+  color: #002fa7;
+  transform: translateX(4px);
 }
 
 .info-panel {
@@ -1048,12 +1618,44 @@ export default {
   animation: slideUp 0.3s ease;
 }
 
-@keyframes slideUp {
+@-webkit-keyframes slideUp {
   from {
+    -webkit-transform: translateY(100%);
     transform: translateY(100%);
     opacity: 0;
   }
   to {
+    -webkit-transform: translateY(0);
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@-moz-keyframes slideUp {
+  from {
+    -moz-transform: translateY(100%);
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    -moz-transform: translateY(0);
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    -webkit-transform: translateY(100%);
+    -moz-transform: translateY(100%);
+    -ms-transform: translateY(100%);
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    -webkit-transform: translateY(0);
+    -moz-transform: translateY(0);
+    -ms-transform: translateY(0);
     transform: translateY(0);
     opacity: 1;
   }
@@ -1064,6 +1666,13 @@ export default {
   border-radius: 20px;
   padding: 24px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  -webkit-transition: all 0.3s ease;
+  -moz-transition: all 0.3s ease;
+  transition: all 0.3s ease;
+}
+
+.info-card:hover {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
 }
 
 .info-header {
@@ -1094,6 +1703,7 @@ export default {
 
 .close-btn:hover {
   background: #e2e8f0;
+  transform: scale(1.1);
 }
 
 .node-detail {
@@ -1103,6 +1713,11 @@ export default {
 .detail-avatar {
   font-size: 56px;
   margin-bottom: 12px;
+  transition: all 0.3s ease;
+}
+
+.node-detail:hover .detail-avatar {
+  transform: scale(1.1);
 }
 
 .node-detail h4 {
@@ -1140,6 +1755,12 @@ export default {
   color: #718096;
   padding: 10px 0;
   border-bottom: 1px solid #f7fafc;
+  transition: all 0.3s ease;
+}
+
+.relations li:hover {
+  color: #002fa7;
+  padding-left: 8px;
 }
 
 .relations li:last-child {
@@ -1163,5 +1784,37 @@ export default {
 .expand-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(0, 47, 167, 0.3);
+}
+
+.expand-btn:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 768px) {
+  .network-container {
+    max-height: 400px;
+  }
+  
+  .genealogy-content {
+    font-size: 16px;
+  }
+  
+  .page-header h1 {
+    font-size: 28px;
+  }
+  
+  .header-icon {
+    font-size: 36px;
+  }
+}
+
+@media (min-width: 769px) {
+  .network-container {
+    max-height: 700px;
+  }
+  
+  .svgWidth {
+    max-width: 1000px;
+  }
 }
 </style>

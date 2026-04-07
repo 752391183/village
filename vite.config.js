@@ -9,5 +9,9 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src')
     }
+  },
+  server: {
+    host: true,
+    allowedHosts: ['k6b7c99d.natappfree.cc']
   }
 })

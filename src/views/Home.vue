@@ -31,7 +31,7 @@
         <h2 class="section-title">了解村里的新鲜事</h2>
       </div>
       <div class="news-list">
-        <div class="news-item" v-for="item in news.slice(0, 3)" :key="item.id" @click="$router.push('/news')">
+        <div class="news-item" v-for="item in news.slice(0, 3)" :key="item.id" @click="$router.push(`/news/${item.id}`)">
           <div class="news-image">
             <img :src="item.image" :alt="item.title">
           </div>

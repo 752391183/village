@@ -47,13 +47,13 @@
     </div>
 
     <div class="public-list">
-      <div class="public-item" v-for="item in filteredPublicInfo" :key="item.id">
+      <div class="public-item" v-for="item in filteredPublicInfo" :key="item.id" @click="goToDetail(item.id)">
         <div class="item-header">
           <span class="category-tag" :class="item.category">{{ item.category }}</span>
           <span class="item-date">{{ item.date }}</span>
         </div>
         <h3 class="item-title">{{ item.title }}</h3>
-        <p class="item-content">{{ item.content }}</p>
+        <p class="item-content">{{ getSummary(item.content) }}</p>
       </div>
     </div>
 
@@ -110,6 +110,17 @@ export default {
   beforeUnmount() {
     this.scrollPositions = {}
     this.visitedTabs.clear()
+  },
+  methods: {
+    goToDetail(id) {
+      this.$router.push(`/public/${id}`)
+    },
+    getSummary(content) {
+      if (!content) return ''
+      // 移除换行符并截取前60个字符作为概览
+      const text = content.replace(/\n/g, ' ')
+      return text.length > 60 ? text.substring(0, 60) + '...' : text
+    }
   }
 }
 </script>
@@ -279,6 +290,14 @@ export default {
   padding: 18px;
   margin-bottom: 12px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.public-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 47, 167, 0.12);
+  border-color: #002fa7;
 }
 
 .item-header {
