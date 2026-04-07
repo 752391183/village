@@ -59,7 +59,7 @@
           </div>
           <div class="tip-item">
             <span class="tip-number">3</span>
-            <span>点击节点可继续扩展</span>
+            <span>点击节点查看详情，使用按钮扩展亲属</span>
           </div>
         </div>
       </div>
@@ -71,108 +71,134 @@
     </div>
 
     <div v-if="hasQueried && !isLoading" class="network-section">
-      <div class="toolbar">
-        <div class="toolbar-info">
-          <span>显示 {{ visibleNodes.length }} 人</span>
-          <span>关系 {{ visibleLinks.length }} 条</span>
+      <div class="network-stage">
+        <div class="network-stage-head">
+          <div class="network-stage-copy">
+            <span class="network-stage-kicker">FAMILY TOPOLOGY</span>
+            <h2>族谱树</h2>
+            <p>以展板式视图呈现当前家族关系，拖拽或缩放即可查看完整谱系脉络。</p>
+          </div>
+          <div class="toolbar">
+            <div class="toolbar-info">
+              <span>镜头 {{ Math.round(zoomLevel * 100) }}%</span>
+              <span>显示 {{ visibleNodes.length }} 人</span>
+              <span>关系 {{ visibleLinks.length }} 条</span>
+            </div>
+            <div class="zoom-controls">
+              <button @click="zoomIn" class="zoom-btn" title="放大">+</button>
+              <button @click="zoomOut" class="zoom-btn" title="缩小">-</button>
+              <button @click="resetView" class="zoom-btn reset" title="重置">重置</button>
+            </div>
+          </div>
         </div>
-        <div class="zoom-controls">
-          <button @click="zoomIn" class="zoom-btn" title="放大">+</button>
-          <button @click="zoomOut" class="zoom-btn" title="缩小">-</button>
-          <button @click="resetView" class="zoom-btn reset" title="重置">⟲</button>
-        </div>
-      </div>
 
-      <div class="network-container" ref="containerRef" @wheel="handleWheel" @mousedown="handleMouseDown" @mousemove="handleMouseMove" @mouseup="handleMouseUp" @mouseleave="handleMouseUp">
-        <svg 
-          ref="svgRef" 
-          class="network-svg"
-          :width="svgWidth"
-          :height="svgHeight"
-          :style="{ transform: `translate(${translateX}px, ${translateY}px) scale(${zoomLevel})` }"
-        >
-          <defs>
-            <filter id="nodeShadow" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#667eea" flood-opacity="0.3"/>
-            </filter>
-            <linearGradient id="nodeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" style="stop-color:#002fa7;stop-opacity:1" />
-              <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
-            </linearGradient>
-            <linearGradient id="queriedGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" style="stop-color:#f97316;stop-opacity:1" />
-              <stop offset="100%" style="stop-color:#fb923c;stop-opacity:1" />
-            </linearGradient>
-            <linearGradient id="maleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" style="stop-color:#4facfe;stop-opacity:1" />
-              <stop offset="100%" style="stop-color:#00f2fe;stop-opacity:1" />
-            </linearGradient>
-            <linearGradient id="femaleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" style="stop-color:#fa709a;stop-opacity:1" />
-              <stop offset="100%" style="stop-color:#fee140;stop-opacity:1" />
-            </linearGradient>
-            <linearGradient id="linkGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" style="stop-color:#a0aec0;stop-opacity:0.8" />
-              <stop offset="100%" style="stop-color:#667eea;stop-opacity:0.8" />
-            </linearGradient>
-            <linearGradient id="highlightedLinkGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" style="stop-color:#002fa7;stop-opacity:1" />
-              <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
-            </linearGradient>
-          </defs>
-
-          <g class="links">
-            <line
-              v-for="(link, index) in visibleLinks"
-              :key="`link-${index}`"
-              :x1="getSafeNode(link.source).x"
-              :y1="getSafeNode(link.source).y"
-              :x2="getSafeNode(link.target).x"
-              :y2="getSafeNode(link.target).y"
-              class="link"
-              :class="{ highlighted: isLinkHighlighted(link) }"
-            />
-          </g>
-
-          <g class="nodes">
-            <g
-              v-for="node in visibleNodes"
-              :key="node.id"
-              :transform="`translate(${node.x}, ${node.y})`"
-              class="node"
-              :class="{ 
-                highlighted: isNodeHighlighted(node),
-                selected: selectedNode?.id === node.id,
-                queried: queriedIds.has(node.id),
-                searchResult: searchResultIds.has(node.id)
-              }"
-              @click="handleNodeClick(node)"
-              @mouseenter="handleNodeHover(node)"
-              @mouseleave="handleNodeLeave"
+        <div class="network-shell">
+          <div class="network-shell-glow glow-left"></div>
+          <div class="network-shell-glow glow-right"></div>
+          <div class="network-watermark">族谱树</div>
+          <div class="network-guide-chip">横向滚动查看完整谱系，点击节点查看关系</div>
+          <div class="network-container" ref="containerRef" @wheel="handleWheel" @mousedown="handleMouseDown" @mousemove="handleMouseMove" @mouseup="handleMouseUp" @mouseleave="handleMouseUp">
+            <svg 
+              ref="svgRef" 
+              class="network-svg"
+              :width="svgWidth"
+              :height="svgHeight"
+              :style="{ transform: `translate(${translateX}px, ${translateY}px) scale(${zoomLevel})` }"
             >
-              <!-- 节点圆圈 -->
-              <circle 
-                r="30" 
-                class="node-circle"
-                :class="{ 
-                  'node-male': node.gender === '男',
-                  'node-female': node.gender === '女',
-                  'node-selected': selectedNode?.id === node.id,
-                  'node-queried': queriedIds.has(node.id),
-                  'node-search-result': searchResultIds.has(node.id)
-                }"
-              />
-              
-              <!-- 节点内容 -->
-              <text class="node-avatar" text-anchor="middle" dy="0.35em">{{ node.avatar }}</text>
-              <text class="node-name" text-anchor="middle" dy="3.5em">{{ node.name }}</text>
-              <text class="node-age" text-anchor="middle" dy="5em">{{ node.age }}岁 · {{ node.gender === '男' ? '男' : '女' }}</text>
-              <text v-if="node.relationToQuery" class="node-relation" text-anchor="middle" dy="6.5em">{{ node.relationToQuery }}</text>
-            </g>
-          </g>
-        </svg>
-      </div>
+              <defs>
+                <filter id="nodeShadow" x="-50%" y="-50%" width="200%" height="200%">
+                  <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#667eea" flood-opacity="0.3"/>
+                </filter>
+                <linearGradient id="nodeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" style="stop-color:#002fa7;stop-opacity:1" />
+                  <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+                </linearGradient>
+                <linearGradient id="queriedGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" style="stop-color:#f97316;stop-opacity:1" />
+                  <stop offset="100%" style="stop-color:#fb923c;stop-opacity:1" />
+                </linearGradient>
+                <linearGradient id="maleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" style="stop-color:#4facfe;stop-opacity:1" />
+                  <stop offset="100%" style="stop-color:#00f2fe;stop-opacity:1" />
+                </linearGradient>
+                <linearGradient id="femaleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" style="stop-color:#fa709a;stop-opacity:1" />
+                  <stop offset="100%" style="stop-color:#fee140;stop-opacity:1" />
+                </linearGradient>
+                <linearGradient id="linkGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" style="stop-color:#a0aec0;stop-opacity:0.8" />
+                  <stop offset="100%" style="stop-color:#667eea;stop-opacity:0.8" />
+                </linearGradient>
+                <linearGradient id="highlightedLinkGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" style="stop-color:#002fa7;stop-opacity:1" />
+                  <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+                </linearGradient>
+              </defs>
 
+              <g class="links">
+                <polyline
+                  v-for="(link, index) in visibleLinks"
+                  :key="`link-${index}`"
+                  :points="getLinkPoints(link)"
+                  class="link"
+                  :class="{ highlighted: isLinkHighlighted(link) }"
+                />
+              </g>
+
+              <g class="nodes">
+                <g
+                  v-for="node in visibleNodes"
+                  :key="node.id"
+                  :transform="`translate(${node.x}, ${node.y})`"
+                  class="node"
+                  :class="{ 
+                    highlighted: isNodeHighlighted(node),
+                    selected: selectedNode?.id === node.id,
+                    queried: queriedIds.has(node.id),
+                    searchResult: searchResultIds.has(node.id)
+                  }"
+                  @click="handleNodeClick(node)"
+                  @mouseenter="handleNodeHover(node)"
+                  @mouseleave="handleNodeLeave"
+                >
+                  <!-- 节点卡片 -->
+                  <rect
+                    x="-64"
+                    y="-4"
+                    width="128"
+                    height="106"
+                    rx="22"
+                    class="node-card"
+                    :class="{ 
+                      'node-card-male': node.gender === '男',
+                      'node-card-female': node.gender === '女',
+                      'node-card-selected': selectedNode?.id === node.id,
+                      'node-card-queried': queriedIds.has(node.id),
+                      'node-card-search-result': searchResultIds.has(node.id)
+                    }"
+                  />
+                  <circle
+                    cx="0"
+                    cy="18"
+                    r="22"
+                    class="node-avatar-ring"
+                    :class="{ 
+                      'node-avatar-ring-male': node.gender === '男',
+                      'node-avatar-ring-female': node.gender === '女'
+                    }"
+                  />
+                  <text class="node-avatar" text-anchor="middle" x="0" y="25">{{ node.avatar }}</text>
+                  <text class="node-name" text-anchor="middle" x="0" y="58">{{ node.name }}</text>
+                  <text class="node-meta" text-anchor="middle" x="0" y="78">{{ getNodeSubtitle(node) }}</text>
+                  <text v-if="node.relationToQuery" class="node-relation-chip" text-anchor="middle" x="0" y="94">{{ node.relationToQuery }}</text>
+                </g>
+              </g>
+            </svg>
+          </div>
+          <div class="network-edge-mask top"></div>
+          <div class="network-edge-mask bottom"></div>
+        </div>
+      </div>
       <div class="legend-section">
         <div class="legend-item">
           <span class="legend-dot male"></span>
@@ -228,7 +254,7 @@
               </li>
             </ul>
           </div>
-          <button class="expand-btn" @click="handleNodeClick(selectedNode)">
+          <button class="expand-btn" @click="expandSelectedNode">
             扩展亲属关系
           </button>
         </div>
@@ -260,8 +286,8 @@ export default {
       searchResultIds: new Set(),
       hoveredNode: null,
       zoomLevel: 1,
-      baseNodeWidth: 100,
-      baseNodeHeight: 180,
+      baseNodeWidth: 168,
+      baseNodeHeight: 156,
       translateX: 0,
       translateY: 0,
       isDragging: false,
@@ -283,7 +309,7 @@ export default {
     this.throttledAdjustSize = this.throttle(this.adjustSize, 100)
     window.addEventListener('resize', this.throttledAdjustSize)
     
-    // 添加滚动事件监听器
+    // 添加滚动事件监听
     const container = this.$refs.containerRef
     if (container) {
       container.addEventListener('scroll', this.handleScroll)
@@ -292,7 +318,7 @@ export default {
   beforeUnmount() {
     window.removeEventListener('resize', this.throttledAdjustSize)
     
-    // 移除滚动事件监听器
+    // 移除滚动事件监听
     const container = this.$refs.containerRef
     if (container) {
       container.removeEventListener('scroll', this.handleScroll)
@@ -357,20 +383,21 @@ export default {
     adjustSize() {
       const container = this.$refs.containerRef
       if (container) {
-        // 计算所需的最小宽度，确保树形结构完整显示
         const nodeWidth = this.baseNodeWidth * this.zoomLevel
-        const maxNodesPerGeneration = this.visibleNodes.length > 0 
+        const horizontalGap = 30 * this.zoomLevel
+        const maxNodesPerGeneration = this.visibleNodes.length > 0
           ? Math.max(...Object.values(this.visibleNodes.reduce((acc, node) => {
               if (!acc[node.generation]) acc[node.generation] = 0
               acc[node.generation]++
               return acc
-            }, {})).map(count => count))
+            }, {})))
           : 1
-        
-        const requiredWidth = maxNodesPerGeneration * nodeWidth + 120 // 120px 边距
+
+        const contentWidth = maxNodesPerGeneration * nodeWidth + (maxNodesPerGeneration - 1) * horizontalGap
+        const requiredWidth = contentWidth + 220
         this.svgWidth = Math.max(container.clientWidth, requiredWidth)
         this.width = this.svgWidth
-        
+
         if (this.visibleNodes.length > 0) {
           this.layoutNodes(this.visibleNodes)
           this.adjustSvgHeight()
@@ -559,15 +586,13 @@ export default {
       this.hasQueried = true
     },
     layoutNodes(nodes, targetNode = null) {
-      // 避免在滚动时进行布局计算
       if (this.isScrolling) return
-      
-      // 使用对象解构和缓存提高性能
-      const nodeWidth = 120 * this.zoomLevel
-      const nodeHeight = 80 * this.zoomLevel
-      const nodeSpacing = 40 * this.zoomLevel
-      
-      // 构建世代映射，使用Map提高性能
+
+      const nodeWidth = this.baseNodeWidth * this.zoomLevel
+      const nodeHeight = this.baseNodeHeight * this.zoomLevel
+      const horizontalGap = 30 * this.zoomLevel
+      const verticalGap = 62 * this.zoomLevel
+
       const generationMap = new Map()
       nodes.forEach(node => {
         const gen = node.generation
@@ -577,42 +602,39 @@ export default {
         generationMap.get(gen).push(node)
       })
 
-      // 排序世代，确保从上往下展示
       const generations = Array.from(generationMap.keys()).sort((a, b) => a - b)
-      
-      // 计算每个世代的宽度，确保树形结构均匀分布
+
       let maxNodesPerGeneration = 1
-      generationMap.forEach(nodes => {
-        if (nodes.length > maxNodesPerGeneration) {
-          maxNodesPerGeneration = nodes.length
+      generationMap.forEach(group => {
+        if (group.length > maxNodesPerGeneration) {
+          maxNodesPerGeneration = group.length
         }
       })
-      
-      const totalTreeWidth = maxNodesPerGeneration * (nodeWidth + nodeSpacing) - nodeSpacing
-      const startX = Math.max(this.svgWidth / 2, totalTreeWidth / 2)
-      let currentY = 80 * this.zoomLevel
 
-      // 批量更新节点位置，减少DOM操作
+      const totalTreeWidth = maxNodesPerGeneration * nodeWidth + (maxNodesPerGeneration - 1) * horizontalGap
+      const startX = Math.max(this.svgWidth / 2, totalTreeWidth / 2 + 72)
+      let currentY = 72 * this.zoomLevel
+
       generations.forEach(gen => {
         const genNodes = generationMap.get(gen)
-        const totalWidth = genNodes.length * (nodeWidth + nodeSpacing) - nodeSpacing
-        const startXOffset = startX - totalWidth / 2 + (nodeWidth + nodeSpacing) / 2
-        
+        const totalWidth = genNodes.length * nodeWidth + (genNodes.length - 1) * horizontalGap
+        const startXOffset = startX - totalWidth / 2 + nodeWidth / 2
+
         genNodes.forEach((node, index) => {
-          node.x = startXOffset + index * (nodeWidth + nodeSpacing)
+          node.x = startXOffset + index * (nodeWidth + horizontalGap)
           node.y = currentY
         })
-        
-        currentY += nodeHeight + nodeSpacing
+
+        currentY += nodeHeight + verticalGap
       })
     },
     adjustSvgHeight() {
       if (this.visibleNodes.length === 0) {
-        this.svgHeight = 500
+        this.svgHeight = 560
         return
       }
       const maxY = Math.max(...this.visibleNodes.map(n => n.y))
-      this.svgHeight = maxY + 120 * this.zoomLevel
+      this.svgHeight = maxY + this.baseNodeHeight * this.zoomLevel + 120
     },
     getParents(nodeId) {
       const parents = []
@@ -656,6 +678,23 @@ export default {
     getSafeNode(id) {
       const node = this.getNodeById(id)
       return node || { x: 0, y: 0 }
+    },
+    getNodeTopAnchor(id) {
+      const node = this.getSafeNode(id)
+      return { x: node.x, y: node.y - 4 }
+    },
+    getNodeBottomAnchor(id) {
+      const node = this.getSafeNode(id)
+      return { x: node.x, y: node.y + 102 }
+    },
+    getLinkPoints(link) {
+      const source = this.getNodeBottomAnchor(link.source)
+      const target = this.getNodeTopAnchor(link.target)
+      const middleY = source.y + (target.y - source.y) / 2
+      return `${source.x},${source.y} ${source.x},${middleY} ${target.x},${middleY} ${target.x},${target.y}`
+    },
+    getNodeSubtitle(node) {
+      return `${node.gender} · ${node.age}岁`
     },
     getNodeColor(node) {
       if (this.searchResultIds.has(node.id)) {
@@ -1165,90 +1204,124 @@ export default {
   font-weight: 500;
 }
 
-.loading-section {
-  padding: 60px 16px;
-  text-align: center;
-}
-
-.loading-spinner {
-  width: 50px;
-  height: 50px;
-  border: 4px solid #e2e8f0;
-  border-top-color: #002fa7;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 20px;
-}
-
-@-webkit-keyframes spin {
-  to { -webkit-transform: rotate(360deg); transform: rotate(360deg); }
-}
-
-@-moz-keyframes spin {
-  to { -moz-transform: rotate(360deg); transform: rotate(360deg); }
-}
-
-@keyframes spin {
-  to { -webkit-transform: rotate(360deg); -moz-transform: rotate(360deg); -ms-transform: rotate(360deg); transform: rotate(360deg); }
-}
-
-.loading-section p {
-  font-size: 15px;
-  color: #666;
-  margin: 0;
-}
-
 .network-section {
   padding: 0 16px 20px;
 }
 
+.network-stage {
+  position: relative;
+  padding: 24px;
+  border-radius: 28px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.2) 34%),
+    linear-gradient(180deg, #f9f5ee 0%, #f5efe6 42%, #f2ebdf 100%);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+}
+
+.network-stage::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.5), transparent 85%);
+  pointer-events: none;
+}
+
+.network-stage-head {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.network-stage-copy {
+  max-width: 420px;
+}
+
+.network-stage-kicker {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0.28em;
+  color: #8a6f44;
+  margin-bottom: 10px;
+}
+
+.network-stage-copy h2 {
+  margin: 0;
+  font-size: 40px;
+  line-height: 1;
+  color: #2f2618;
+  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.network-stage-copy p {
+  margin: 12px 0 0;
+  color: #8d836f;
+  line-height: 1.7;
+  font-size: 14px;
+}
+
 .toolbar {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: white;
-  padding: 12px 16px;
-  border-radius: 16px;
-  margin-bottom: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-  transition: all 0.3s ease;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(226, 219, 208, 0.96);
+  box-shadow: 0 8px 18px rgba(193, 186, 174, 0.16);
+  backdrop-filter: blur(10px);
 }
 
 .toolbar:hover {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 18px 32px rgba(148, 163, 184, 0.22);
 }
 
 .toolbar-info {
   display: flex;
-  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
   font-size: 13px;
-  color: #666;
+  color: #7d7361;
 }
 
 .toolbar-info span {
-  padding: 4px 12px;
-  background: #f7fafc;
-  border-radius: 100px;
-  font-weight: 500;
-  transition: all 0.3s ease;
+  padding: 7px 14px;
+  background: #fffdfa;
+  border: 1px solid rgba(226, 219, 208, 0.96);
+  border-radius: 999px;
+  font-weight: 600;
 }
 
 .toolbar-info span:hover {
-  background: #e2e8f0;
+  background: rgba(255, 250, 240, 0.96);
 }
 
 .zoom-controls {
   display: flex;
-  gap: 8px;
+  gap: 10px;
 }
 
 .zoom-btn {
-  width: 40px;
-  height: 40px;
-  border: 2px solid #e2e8f0;
-  background: white;
-  border-radius: 10px;
-  font-size: 20px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(255, 255, 255, 0.92);
+  color: #3d2e19;
+  border-radius: 14px;
+  font-size: 18px;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.3s;
   display: flex;
@@ -1257,27 +1330,53 @@ export default {
 }
 
 .zoom-btn:hover {
-  border-color: #002fa7;
-  background: #f7fafc;
-  transform: scale(1.05);
+  border-color: rgba(138, 111, 68, 0.35);
+  background: #fffdf8;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(148, 163, 184, 0.18);
 }
 
 .zoom-btn:active {
-  transform: scale(0.95);
+  transform: translateY(0);
 }
 
 .zoom-btn.reset {
-  font-size: 16px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+.network-shell {
+  position: relative;
+  z-index: 1;
+  padding: 18px;
+  border-radius: 26px;
+  overflow: visible;
+  background: linear-gradient(180deg, #f8f5ef 0%, #f6f2ea 100%);
+  border: 1px solid rgba(225, 218, 207, 0.92);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.network-guide-chip {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 14px 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: #9a8f7d;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(226, 219, 208, 0.96);
 }
 
 .network-container {
   position: relative;
   overflow: auto;
-  max-height: 700px;
-  border-radius: 20px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-  transition: all 0.3s ease;
-  background: white;
+  max-height: 640px;
+  width: 100%;
+  border-radius: 24px;
+  border: 1px solid rgba(226, 219, 208, 0.96);
+  background: #fffdfa;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.98);
   cursor: grab;
 }
 
@@ -1285,26 +1384,24 @@ export default {
   cursor: grabbing;
 }
 
-/* 自定义滚动条样式 */
 .network-container::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 .network-container::-webkit-scrollbar-track {
-  background: #f1f5f9;
-  border-radius: 10px;
+  background: rgba(230, 230, 230, 0.6);
+  border-radius: 999px;
   margin: 10px;
 }
 
 .network-container::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 10px;
-  transition: all 0.3s ease;
+  background: rgba(171, 180, 196, 0.9);
+  border-radius: 999px;
 }
 
 .network-container::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgba(140, 149, 164, 1);
 }
 
 .network-container::-moz-scrollbar {
@@ -1313,192 +1410,123 @@ export default {
 }
 
 .network-container::-moz-scrollbar-track {
-  background: #f1f5f9;
-  border-radius: 10px;
+  background: rgba(230, 230, 230, 0.6);
+  border-radius: 999px;
   margin: 10px;
 }
 
 .network-container::-moz-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 10px;
-  transition: all 0.3s ease;
+  background: rgba(171, 180, 196, 0.9);
+  border-radius: 999px;
 }
 
 .network-container::-moz-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgba(140, 149, 164, 1);
 }
 
 .network-svg {
+  position: relative;
+  z-index: 1;
   min-width: 100%;
-  background: white;
   display: block;
-  border-radius: 20px;
-  padding: 20px;
+  padding: 30px 44px 40px;
+  background: #fffdfa;
   transition: transform 0.1s ease;
 }
-
 .link {
-  stroke: url(#linkGradient);
-  stroke-width: 2;
+  fill: none;
+  stroke: #d7d2cb;
+  stroke-width: 2.5;
   transition: all 0.3s ease;
-  opacity: 0.7;
+  opacity: 0.9;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .link:hover {
+  stroke: #d3aa69;
   stroke-width: 3;
-  opacity: 0.9;
-  stroke: url(#highlightedLinkGradient);
 }
 
 .link.highlighted {
-  stroke: url(#highlightedLinkGradient);
-  stroke-width: 4;
+  stroke: #d3aa69;
+  stroke-width: 3.5;
   opacity: 1;
-  stroke-dasharray: 8;
-  stroke-dashoffset: 0;
-  animation: pulse 2s ease-in-out infinite, dash 3s linear infinite;
-}
-
-@keyframes dash {
-  to {
-    stroke-dashoffset: -16;
-  }
-}
-
-@-webkit-keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
-}
-
-@-moz-keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
+  filter: drop-shadow(0 0 8px rgba(211, 170, 105, 0.35));
 }
 
 .node {
   cursor: pointer;
-  -webkit-transition: all 0.2s ease-out;
-  -moz-transition: all 0.2s ease-out;
-  transition: all 0.2s ease-out;
+  transition: transform 0.2s ease-out;
 }
 
 .node:hover {
-  -webkit-transform: scale(1.05);
-  -moz-transform: scale(1.05);
-  -ms-transform: scale(1.05);
-  transform: scale(1.05);
+  transform: scale(1.03);
 }
 
-.node-circle {
-  stroke: white;
+.node-card {
+  fill: rgba(255, 255, 255, 0.98);
+  stroke: rgba(228, 221, 210, 0.98);
+  stroke-width: 1.4;
+  filter: drop-shadow(0 12px 24px rgba(168, 160, 148, 0.16));
+  transition: all 0.25s ease;
+}
+
+.node-card-selected {
+  stroke: #d3aa69;
+  stroke-width: 2.4;
+  filter: drop-shadow(0 14px 24px rgba(211, 170, 105, 0.22));
+}
+
+.node-card-queried {
+  stroke: #f0bc72;
   stroke-width: 2;
-  transition: all 0.2s ease;
-  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
 }
 
-.node-male {
+.node-card-search-result {
+  stroke: #ff9c5b;
+  stroke-width: 2.6;
+}
+
+.node-avatar-ring {
+  stroke: #ffffff;
+  stroke-width: 3;
+  filter: drop-shadow(0 6px 12px rgba(216, 109, 167, 0.24));
+}
+
+.node-avatar-ring-male {
   fill: url(#maleGradient);
 }
 
-.node-female {
+.node-avatar-ring-female {
   fill: url(#femaleGradient);
 }
 
-.node-selected {
-  stroke: #002fa7;
-  stroke-width: 4;
-  filter: url(#nodeShadow);
-}
-
-.node-queried {
-  stroke: #f093fb;
-  stroke-width: 4;
-}
-
-.node-search-result {
-  stroke: #f97316;
-  stroke-width: 5;
-  animation: pulse 2s ease-in-out infinite;
-}
-
 .node-avatar {
-  font-size: 24px;
+  font-size: 22px;
   pointer-events: none;
-  -webkit-transition: all 0.3s ease;
-  -moz-transition: all 0.3s ease;
-  transition: all 0.3s ease;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  fill: white;
-}
-
-.node:hover .node-avatar {
-  font-size: 28px;
-  -webkit-transform: scale(1.1);
-  -moz-transform: scale(1.1);
-  -ms-transform: scale(1.1);
-  transform: scale(1.1);
 }
 
 .node-name {
-  font-size: 12px;
-  fill: #2d3748;
-  font-weight: 600;
-  pointer-events: none;
-  transition: all 0.3s ease;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-.node:hover .node-name {
-  font-size: 13px;
+  font-size: 14px;
+  fill: #2b2b2b;
   font-weight: 700;
-  fill: #002fa7;
+  pointer-events: none;
 }
 
-.node-age {
+.node-meta {
   font-size: 10px;
-  fill: #002fa7;
+  fill: #8f8a81;
   font-weight: 500;
   pointer-events: none;
-  transition: all 0.3s ease;
 }
 
-.node:hover .node-age {
-  fill: #3b82f6;
-  font-weight: 600;
-}
-
-.node-relation {
+.node-relation-chip {
   font-size: 9px;
-  fill: #718096;
-  font-weight: 500;
+  fill: #7d5c2e;
+  font-weight: 700;
   pointer-events: none;
-  font-style: italic;
-  transition: all 0.3s ease;
 }
-
-.node:hover .node-relation {
-  fill: #4a5568;
-}
-
 .legend-section {
   display: flex;
   flex-wrap: wrap;
@@ -1791,8 +1819,55 @@ export default {
 }
 
 @media (max-width: 768px) {
+  .network-stage {
+    padding: 18px;
+    border-radius: 22px;
+  }
+
+  .network-stage-head {
+    flex-direction: column;
+  }
+
+  .network-stage-copy h2 {
+    font-size: 34px;
+  }
+
+  .toolbar {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .toolbar-info {
+    justify-content: flex-start;
+  }
+
+  .zoom-controls {
+    justify-content: flex-start;
+  }
+
+  .network-shell {
+    padding: 94px 12px 12px;
+  }
+
+  .network-watermark {
+    top: 22px;
+    left: 18px;
+    font-size: 34px;
+  }
+
+  .network-guide-chip {
+    top: 72px;
+    left: 18px;
+    right: auto;
+    max-width: calc(100% - 36px);
+  }
+
   .network-container {
-    max-height: 400px;
+    max-height: 420px;
+  }
+
+  .network-svg {
+    padding: 108px 22px 36px;
   }
   
   .genealogy-content {
@@ -1818,3 +1893,7 @@ export default {
   }
 }
 </style>
+
+
+
+
