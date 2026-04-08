@@ -15,7 +15,7 @@
       </div>
     </div>
 
-    <div class="genealogy-section" v-if="!isMobile">
+    <div class="genealogy-section">
       <div class="genealogy-card">
         <div class="genealogy-title">字辈（派语）</div>
         <div class="genealogy-content">
@@ -29,9 +29,9 @@
 
     <div class="search-section">
       <div class="search-box-wrapper">
-        <input 
-          v-model="searchName" 
-          type="text" 
+        <input
+          v-model="searchName"
+          type="text"
           placeholder="请输入要查询的人员姓名..."
           class="search-input"
           @keyup.enter="handleSearch"
@@ -42,7 +42,7 @@
       </div>
     </div>
 
-    <div v-if="!hasQueried && !isLoading && !isMobile" class="guide-section">
+    <div v-if="!hasQueried && !isLoading" class="guide-section">
       <div class="guide-card">
         <div class="guide-icon">🔍</div>
         <h3>欢迎使用关系查询</h3>
@@ -97,20 +97,20 @@
           <div class="network-shell-glow glow-right"></div>
           <div class="network-watermark">族谱树</div>
           <div class="network-guide-chip">横向滚动查看完整谱系，点击节点查看关系</div>
-          <div 
-            class="network-container" 
-            ref="containerRef" 
-            @wheel="handleWheel" 
-            @mousedown="handleMouseDown" 
-            @mousemove="handleMouseMove" 
-            @mouseup="handleMouseUp" 
+          <div
+            class="network-container"
+            ref="containerRef"
+            @wheel="handleWheel"
+            @mousedown="handleMouseDown"
+            @mousemove="handleMouseMove"
+            @mouseup="handleMouseUp"
             @mouseleave="handleMouseUp"
             @touchstart="handleTouchStart"
             @touchmove="handleTouchMove"
             @touchend="handleTouchEnd"
           >
-            <svg 
-              ref="svgRef" 
+            <svg
+              ref="svgRef"
               class="network-svg"
               :width="svgWidth"
               :height="svgHeight"
@@ -168,7 +168,7 @@
                   :key="node.id"
                   :transform="`translate(${node.x}, ${node.y})`"
                   class="node"
-                  :class="{ 
+                  :class="{
                     highlighted: isNodeHighlighted(node),
                     selected: selectedNode?.id === node.id,
                     searchResult: searchResultIds.has(node.id)
@@ -194,13 +194,13 @@
                     class="node-avatar-bg"
                   />
                   <text class="node-avatar" text-anchor="middle" x="0" y="34">{{ node.avatar }}</text>
-                  
+
                   <!-- 姓名 - 黑色粗体 -->
                   <text class="node-name" text-anchor="middle" x="0" y="75">{{ node.name }}</text>
-                  
+
                   <!-- 称谓 - 蓝色 -->
                   <text class="node-title" text-anchor="middle" x="0" y="95">{{ getNodeTitle(node) }}</text>
-                  
+
                   <!-- 年份 - 灰色 -->
                   <text class="node-years" text-anchor="middle" x="0" y="115">{{ getNodeYears(node) }}</text>
                 </g>
@@ -234,13 +234,11 @@
         </div>
       </div>
 
-      <div class="tips-section" v-if="!isMobile">
+      <div class="tips-section">
         <div class="tips-card">
           <div class="tips-icon">💡</div>
           <h3>使用提示</h3>
           <ul>
-            <li>点击节点可扩展该人物的上三代和下三代亲属</li>
-            <li>滚动查看更多节点</li>
             <li>年龄分类：儿童(0-12)、少年(13-17)、青年(18-40)、中年(41-59)、老人(60+)</li>
             <li>搜索结果会高亮显示，并突出相关联的节点和连接线</li>
           </ul>
@@ -248,9 +246,9 @@
       </div>
     </div>
 
-    <div class="info-panel" v-if="selectedNode" :class="{ 'mobile-sheet': isMobile }">
+    <div class="info-panel" v-if="selectedNode">
       <div class="info-card">
-        <div class="info-drag-handle" v-if="isMobile"></div>
+        <div class="info-drag-handle"></div>
         <div class="info-header">
           <h3>人员详情</h3>
           <button class="close-btn" @click="selectedNode = null">×</button>
@@ -290,10 +288,8 @@ export default {
       allLinks: [],
       visibleNodes: [],
       visibleLinks: [],
-      width: 5000,
-      height: 5000,
       svgWidth: 5000,
-      svgHeight: 5000,
+      svgHeight: 3200,
       selectedNode: null,
       searchName: '',
       isLoading: false,
@@ -302,7 +298,6 @@ export default {
       searchResultIds: new Set(),
       hoveredNode: null,
       zoomLevel: 1,
-      isMobile: false,
       baseNodeWidth: 168,
       baseNodeHeight: 156,
       translateX: 0,
@@ -311,44 +306,14 @@ export default {
       startX: 0,
       startY: 0,
       startTranslateX: 0,
-      startTranslateY: 0,
-      // 性能优化相关
-      isScrolling: false,
-      scrollTimeout: null
+      startTranslateY: 0
     }
   },
   mounted() {
     this.initFamilyTree()
-    this.checkMobile()
-    this.adjustSize()
     this.loadTopLevelNodes()
-    
-    // 使用节流函数优化resize事件处理
-    this.throttledAdjustSize = this.throttle(() => {
-      this.checkMobile()
-      this.adjustSize()
-    }, 100)
-    window.addEventListener('resize', this.throttledAdjustSize)
-    
-    // 添加滚动事件监听
-    const container = this.$refs.containerRef
-    if (container) {
-      container.addEventListener('scroll', this.handleScroll)
-    }
   },
   beforeUnmount() {
-    window.removeEventListener('resize', this.throttledAdjustSize)
-    
-    // 移除滚动事件监听
-    const container = this.$refs.containerRef
-    if (container) {
-      container.removeEventListener('scroll', this.handleScroll)
-    }
-    
-    // 清除定时器
-    if (this.scrollTimeout) {
-      clearTimeout(this.scrollTimeout)
-    }
   },
   methods: {
     initFamilyTree() {
@@ -362,19 +327,18 @@ export default {
     },
     loadTopLevelNodes() {
       this.isLoading = true
-      
-      if (this.isMobile) {
-        this.zoomLevel = 0.7
-      }
-      
+
+      // 默认使用手机端缩放级别
+      this.zoomLevel = 0.7
+
       setTimeout(() => {
         const topLevelNodes = this.allNodes.filter(node => node.generation === 0)
-        
+
         if (topLevelNodes.length > 0) {
           // 递归加载所有层级节点
           const allHierarchyNodes = []
           const visited = new Set()
-          
+
           const loadAllNodes = (nodes) => {
             nodes.forEach(node => {
               if (!visited.has(node.id)) {
@@ -382,7 +346,7 @@ export default {
                 allHierarchyNodes.push(node)
                 node.relationToQuery = node.generation === 0 ? '祖先' : '家族成员'
                 this.queriedIds.add(node.id)
-                
+
                 // 加载子节点
                 const children = this.getChildren(node.id)
                 if (children.length > 0) {
@@ -391,33 +355,25 @@ export default {
               }
             })
           }
-          
+
           loadAllNodes(topLevelNodes)
-          
+
           this.visibleNodes = allHierarchyNodes
           this.updateVisibleLinks()
-          
-        this.layoutNodes(this.visibleNodes)
-        this.adjustSvgHeight()
-        this.hasQueried = true
-        
-        // 加载完成后自动对焦，稍微延迟确保容器尺寸已稳定
-        setTimeout(() => {
-          this.$nextTick(() => {
-            this.autoFit()
-          })
-        }, 100)
-      }
-        
-      this.isLoading = false
-    }, 800) // 稍微延长 loading 时间，等待布局稳定
-    },
-    adjustSize() {
-      this.checkMobile()
-      // 现在画布已固化大底座，不再手动重算 svgWidth，避免键盘弹出干扰
-    },
-    checkMobile() {
-      this.isMobile = window.innerWidth <= 768
+
+          this.layoutNodes(this.visibleNodes)
+          this.hasQueried = true
+
+          // 加载完成后自动对焦，稍微延迟确保容器尺寸已稳定
+          setTimeout(() => {
+            this.$nextTick(() => {
+              this.autoFit()
+            })
+          }, 100)
+        }
+
+        this.isLoading = false
+      }, 800) // 稍微延长 loading 时间，等待布局稳定
     },
     getAgeGroup(age) {
       if (age >= 60) return '老人'
@@ -436,19 +392,19 @@ export default {
 
       setTimeout(() => {
         const searchResults = this.allNodes.filter(n => n.name.includes(this.searchName.trim()))
-        
+
         if (searchResults.length > 0) {
           this.searchResultIds = new Set(searchResults.map(node => node.id))
-          
+
           // 确保搜索结果和相关节点都可见
           const allRelatedNodeIds = new Set(this.searchResultIds)
-          
+
           searchResults.forEach(node => {
             if (!this.visibleNodes.find(n => n.id === node.id)) {
               this.visibleNodes.push(node)
               this.queriedIds.add(node.id)
             }
-            
+
             // 获取所有相关节点
             const relatedNodes = this.getRelatedNodes(node.id)
             relatedNodes.forEach(relatedNode => {
@@ -458,10 +414,9 @@ export default {
               allRelatedNodeIds.add(relatedNode.id)
             })
           })
-          
+
           this.updateVisibleLinks()
           this.layoutNodes(this.visibleNodes)
-          this.adjustSvgHeight()
           this.hasQueried = true
 
           // 查询后确保自动对焦，延迟确保 DOM 渲染完成
@@ -474,7 +429,7 @@ export default {
           alert('未找到该人员，请检查姓名是否正确')
           this.searchResultIds.clear()
         }
-        
+
         this.isLoading = false
       }, 300)
     },
@@ -482,23 +437,23 @@ export default {
       const relatedNodes = []
       const visited = new Set()
       const queue = [nodeId]
-      
+
       while (queue.length > 0) {
         const currentId = queue.shift()
         if (visited.has(currentId)) continue
-        
+
         visited.add(currentId)
-        
+
         const parents = this.getParents(currentId)
         const children = this.getChildren(currentId)
-        
+
         parents.forEach(parent => {
           if (!visited.has(parent.id)) {
             relatedNodes.push(parent)
             queue.push(parent.id)
           }
         })
-        
+
         children.forEach(child => {
           if (!visited.has(child.id)) {
             relatedNodes.push(child)
@@ -506,19 +461,19 @@ export default {
           }
         })
       }
-      
+
       return relatedNodes
     },
     updateVisibleLinks() {
       const nodeIds = new Set(this.visibleNodes.map(node => node.id))
-      this.visibleLinks = this.allLinks.filter(link => 
+      this.visibleLinks = this.allLinks.filter(link =>
         nodeIds.has(link.source) && nodeIds.has(link.target)
       )
     },
     queryNode(targetNode, isInitial = false) {
       const relatedNodeIds = new Set([targetNode.id])
       const newVisibleNodes = [targetNode]
-      
+
       if (isInitial) {
         this.queriedIds = new Set([targetNode.id])
         this.searchResultIds.clear()
@@ -531,20 +486,20 @@ export default {
       const parents = this.getParents(targetNode.id)
       const grandparents = []
       const greatGrandparents = []
-      
+
       parents.forEach(parent => {
         if (!relatedNodeIds.has(parent.id)) {
           parent.relationToQuery = '父辈'
           newVisibleNodes.push(parent)
           relatedNodeIds.add(parent.id)
-          
+
           const gps = this.getParents(parent.id)
           gps.forEach(gp => {
             if (!relatedNodeIds.has(gp.id)) {
               gp.relationToQuery = '祖父辈'
               grandparents.push(gp)
               relatedNodeIds.add(gp.id)
-              
+
               const ggps = this.getParents(gp.id)
               ggps.forEach(ggp => {
                 if (!relatedNodeIds.has(ggp.id)) {
@@ -557,26 +512,26 @@ export default {
           })
         }
       })
-      
+
       newVisibleNodes.push(...grandparents, ...greatGrandparents)
 
       const children = this.getChildren(targetNode.id)
       const grandchildren = []
       const greatGrandchildren = []
-      
+
       children.forEach(child => {
         if (!relatedNodeIds.has(child.id)) {
           child.relationToQuery = '子辈'
           newVisibleNodes.push(child)
           relatedNodeIds.add(child.id)
-          
+
           const gcs = this.getChildren(child.id)
           gcs.forEach(gc => {
             if (!relatedNodeIds.has(gc.id)) {
               gc.relationToQuery = '孙辈'
               grandchildren.push(gc)
               relatedNodeIds.add(gc.id)
-              
+
               const ggcs = this.getChildren(gc.id)
               ggcs.forEach(ggc => {
                 if (!relatedNodeIds.has(ggc.id)) {
@@ -589,7 +544,7 @@ export default {
           })
         }
       })
-      
+
       newVisibleNodes.push(...grandchildren, ...greatGrandchildren)
 
       if (isInitial) {
@@ -601,20 +556,17 @@ export default {
           }
         })
       }
-      
+
       this.updateVisibleLinks()
       this.layoutNodes(this.visibleNodes, targetNode)
-      this.adjustSvgHeight()
       this.hasQueried = true
-      
+
       // 扩展节点后自动对焦，确保新节点可见
       this.$nextTick(() => {
         this.autoFit()
       })
     },
     layoutNodes(nodes, targetNode = null) {
-      if (this.isScrolling) return
-
       const nodeWidth = this.baseNodeWidth
       const nodeHeight = this.baseNodeHeight
       const horizontalGap = 30
@@ -639,7 +591,7 @@ export default {
       })
 
       const totalTreeWidth = maxNodesPerGeneration * nodeWidth + (maxNodesPerGeneration - 1) * horizontalGap
-      
+
       const startX = 2500 // 固定画布中心起始点
       let currentY = 200
 
@@ -655,9 +607,6 @@ export default {
 
         currentY += nodeHeight + verticalGap
       })
-    },
-    adjustSvgHeight() {
-      // 现在的画布已固化大底座，如果需要特定逻辑可以放这
     },
     getParents(nodeId) {
       const parents = []
@@ -756,15 +705,15 @@ export default {
     isNodeHighlighted(node) {
       if (this.searchResultIds.has(node.id)) return true
       if (this.hoveredNode) {
-        return this.visibleLinks.some(link => 
+        return this.visibleLinks.some(link =>
           (link.source === this.hoveredNode.id && link.target === node.id) ||
           (link.target === this.hoveredNode.id && link.source === node.id)
         )
       }
       if (!this.selectedNode) return false
       if (this.selectedNode?.id === node.id) return true
-      
-      return this.visibleLinks.some(link => 
+
+      return this.visibleLinks.some(link =>
         (link.source === this.selectedNode.id && link.target === node.id) ||
         (link.target === this.selectedNode.id && link.source === node.id)
       )
@@ -774,17 +723,17 @@ export default {
       if (this.searchResultIds.has(link.source) || this.searchResultIds.has(link.target)) {
         return true
       }
-      
+
       // 悬停节点相关联的连接线高亮
       if (this.hoveredNode) {
         return link.source === this.hoveredNode.id || link.target === this.hoveredNode.id
       }
-      
+
       // 选中节点相关联的连接线高亮
       if (this.selectedNode) {
         return link.source === this.selectedNode.id || link.target === this.selectedNode.id
       }
-      
+
       return false
     },
     getNodeRelations(nodeId) {
@@ -817,7 +766,7 @@ export default {
       this.translateX = 0
       this.translateY = 0
       this.loadTopLevelNodes()
-      
+
       // 重置后自动对焦
       this.$nextTick(() => {
         this.autoFit()
@@ -825,7 +774,7 @@ export default {
     },
     autoFit() {
       if (this.visibleNodes.length === 0) return
-      
+
       const container = this.$refs.containerRef
       if (!container || container.clientWidth === 0 || container.clientHeight === 0) {
         setTimeout(() => this.autoFit(), 100)
@@ -856,8 +805,8 @@ export default {
       // 考虑卡片自身的真实宽度
       const contentWidth = (maxX - minX) + this.baseNodeWidth
       const contentHeight = (maxY - minY) + this.baseNodeHeight
-      
-      const padding = this.isMobile ? 30 : 60
+
+      const padding = 30 // 默认使用手机端的 padding
       const availWidth = container.clientWidth - padding * 2
       const availHeight = container.clientHeight - padding * 2
 
@@ -869,11 +818,11 @@ export default {
       // 3. 居中计算：将逻辑中心点与容器中心点对齐
       const logicCenterX = minX + contentWidth / 2
       const logicCenterY = minY + contentHeight / 2
-      
+
       // 增加溢出保护，确保居中坐标不是极端大数
       const targetX = container.clientWidth / 2 - (logicCenterX * this.zoomLevel)
       const targetY = container.clientHeight / 2 - (logicCenterY * this.zoomLevel)
-      
+
       this.translateX = isNaN(targetX) ? 0 : targetX
       this.translateY = isNaN(targetY) ? 0 : targetY
     },
@@ -881,10 +830,10 @@ export default {
     updateZoom(newZoom, anchorX, anchorY) {
       const oldZoom = this.zoomLevel
       const zoomThreshold = 0.15
-      
+
       // 限制缩放区间
       newZoom = Math.max(0.2, Math.min(newZoom, 2.0))
-      
+
       if (newZoom === oldZoom) return
 
       // 核心补偿公式：
@@ -904,6 +853,8 @@ export default {
       this.updateZoom(this.zoomLevel - 0.15, container.clientWidth / 2, container.clientHeight / 2)
     },
     handleWheel(event) {
+      if (!event.ctrlKey && !event.metaKey) return
+
       event.preventDefault()
       const container = this.$refs.containerRef
       if (!container) return
@@ -911,7 +862,7 @@ export default {
       const rect = container.getBoundingClientRect()
       const mouseX = event.clientX - rect.left
       const mouseY = event.clientY - rect.top
-      
+
       const delta = event.deltaY > 0 ? -0.1 : 0.1
       this.updateZoom(this.zoomLevel + delta, mouseX, mouseY)
     },
@@ -926,10 +877,10 @@ export default {
       if (this.isDragging) {
         const deltaX = event.clientX - this.startX
         const deltaY = event.clientY - this.startY
-        
+
         let nextTranslateX = this.startTranslateX + deltaX
         let nextTranslateY = this.startTranslateY + deltaY
-        
+
         // 电子围栏：限制位移防止消失，并处理 NaN
         if (isFinite(nextTranslateX) && isFinite(nextTranslateY)) {
           this.translateX = Math.max(-5000, Math.min(5000, nextTranslateX))
@@ -967,46 +918,12 @@ export default {
     handleTouchEnd() {
       this.isDragging = false
     },
-    
-    // 节流函数，用于优化滚动和调整大小的事件处理
-    throttle(fn, delay) {
-      let timer = null
-      return function() {
-        if (!timer) {
-          timer = setTimeout(() => {
-            fn.apply(this, arguments)
-            timer = null
-          }, delay)
-        }
-      }
-    },
-    
-    // 优化布局计算，避免不必要的重计算
     optimizeLayout() {
       if (this.visibleNodes.length > 0) {
-        // 使用requestAnimationFrame优化渲染
         requestAnimationFrame(() => {
           this.layoutNodes(this.visibleNodes)
-          this.adjustSvgHeight()
         })
       }
-    },
-    
-    // 处理滚动事件，用于虚拟滚动
-    handleScroll(event) {
-      if (this.isScrolling) return
-      
-      this.isScrolling = true
-      
-      // 清除之前的定时器
-      if (this.scrollTimeout) {
-        clearTimeout(this.scrollTimeout)
-      }
-      
-      // 设置新的定时器
-      this.scrollTimeout = setTimeout(() => {
-        this.isScrolling = false
-      }, 100)
     }
   }
 }
@@ -1014,12 +931,13 @@ export default {
 
 <style scoped>
 .relationship {
-  height: 100vh;
+  min-height: 100vh;
   background-color: #f8fafc;
   padding: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden; /* 防止页面整体滚动 */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .page-header {
@@ -1363,14 +1281,13 @@ export default {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  min-height: 400px;
 }
 
 .network-stage {
   position: relative;
   padding: 24px;
   border-radius: 28px;
-  overflow: hidden;
   background:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.2) 34%),
     linear-gradient(180deg, #f9f5ee 0%, #f5efe6 42%, #f2ebdf 100%);
@@ -1379,6 +1296,7 @@ export default {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 400px;
 }
 
 .network-stage::before {
@@ -1543,19 +1461,25 @@ export default {
   border: 1px solid rgba(226, 219, 208, 0.96);
 }
 
+.network-shell {
+  --network-viewport-height: clamp(420px, 64vh, 720px);
+}
+
 .network-container {
   position: relative;
-  overflow: hidden; /* 改为 hidden，由于支持平移，无需原生滚动条 */
-  flex: 1;
+  overflow-x: auto;
+  overflow-y: auto;
+  flex: 0 0 auto;
   width: 100%;
-  height: 100%;
-  min-height: 400px;
+  height: var(--network-viewport-height);
   border-radius: 24px;
   border: 1px solid rgba(226, 219, 208, 0.96);
   background: #fffdfa;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.98);
   cursor: grab;
-  
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+
   /* 隐藏滚动条 */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
@@ -1577,6 +1501,7 @@ export default {
   position: relative;
   z-index: 1;
   min-width: 100%;
+  min-height: 100%;
   display: block;
   padding: 30px 44px 40px;
   background: #fffdfa;
@@ -1962,27 +1887,15 @@ export default {
 }
 
 @media (max-width: 768px) {
-  .relationship {
-    height: 100vh;
-    overflow: hidden;
-  }
-  
-  .page-header {
-    padding: 10px 15px;
-  }
-  
   .page-header h1 {
     font-size: 20px;
     margin: 5px 0;
   }
-  
+
   .header-content {
     padding: 0;
   }
-  
-  .header-icon, .header-label, .header-divider, .header-subtitle, .header-decoration {
-    display: none;
-  }
+
 
   .network-stage {
     padding: 8px;
@@ -2026,6 +1939,7 @@ export default {
   }
 
   .network-shell {
+    --network-viewport-height: clamp(360px, 58vh, 520px);
     padding: 5px;
     border-radius: 12px;
   }
@@ -2035,11 +1949,11 @@ export default {
   }
 
   .network-container {
-    height: 100%;
+    height: var(--network-viewport-height);
     max-height: none;
     border-radius: 10px;
   }
-  
+
   .info-panel {
     bottom: 0;
     left: 0;
@@ -2096,13 +2010,9 @@ export default {
   .network-container {
     max-height: 700px;
   }
-  
+
   .svgWidth {
     max-width: 1000px;
   }
 }
 </style>
-
-
-
-
