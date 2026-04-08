@@ -157,80 +157,53 @@ export const mockData = {
     workingHours: '周一至周五 8:00-17:00',
     wechat: '幸福村村委会'
   },
-  relationshipNetwork: {
-    nodes: [
-      { id: 1, name: '张仁贵', gender: '男', age: 78, avatar: '👴', generation: 0 },
-      { id: 2, name: '李翠云', gender: '女', age: 75, avatar: '👵', generation: 0 },
-      { id: 3, name: '张德文', gender: '男', age: 58, avatar: '👨', generation: 1 },
-      { id: 4, name: '陈美丽', gender: '女', age: 55, avatar: '👩', generation: 1 },
-      { id: 5, name: '张建军', gender: '男', age: 38, avatar: '👱', generation: 2 },
-      { id: 6, name: '刘艳丽', gender: '女', age: 35, avatar: '👩', generation: 2 },
-      { id: 7, name: '张建平', gender: '男', age: 32, avatar: '👱', generation: 2 },
-      { id: 8, name: '何丽', gender: '女', age: 29, avatar: '👩', generation: 2 },
-      { id: 9, name: '张端', gender: '男', age: 15, avatar: '👦', generation: 3 },
-      { id: 10, name: '车声远', gender: '男', age: 8, avatar: '👦', generation: 4 },
-      { id: 11, name: '车丕文', gender: '女', age: 6, avatar: '👧', generation: 4 },
-      { id: 12, name: '车振邦', gender: '男', age: 82, avatar: '👴', generation: 0 },
-      { id: 13, name: '车世安', gender: '女', age: 79, avatar: '👵', generation: 0 },
-      { id: 14, name: '车泽惠', gender: '男', age: 62, avatar: '👨', generation: 1 },
-      { id: 15, name: '车悠游', gender: '女', age: 59, avatar: '👩', generation: 1 },
-      { id: 16, name: '车长胜', gender: '男', age: 42, avatar: '👱', generation: 2 },
-      { id: 17, name: '车必贵', gender: '女', age: 39, avatar: '👩', generation: 2 },
-      { id: 18, name: '车有福', gender: '男', age: 22, avatar: '👦', generation: 3 },
-      { id: 19, name: '车馀庆', gender: '女', age: 19, avatar: '👧', generation: 3 },
-      { id: 20, name: '车庆丰', gender: '男', age: 4, avatar: '👦', generation: 4 },
-      { id: 21, name: '车乃文', gender: '男', age: 76, avatar: '👴', generation: 0 },
-      { id: 22, name: '车发强', gender: '女', age: 73, avatar: '👵', generation: 0 },
-      { id: 23, name: '车其祥', gender: '男', age: 52, avatar: '👨', generation: 1 },
-      { id: 24, name: '车祥云', gender: '女', age: 49, avatar: '👩', generation: 1 },
-      { id: 25, name: '车经天', gender: '男', age: 30, avatar: '👱', generation: 2 },
-      { id: 26, name: '车纬地', gender: '女', age: 27, avatar: '👩', generation: 2 },
-      { id: 27, name: '车武勇', gender: '男', age: 12, avatar: '👦', generation: 3 },
-      { id: 28, name: '车永强', gender: '女', age: 10, avatar: '👧', generation: 3 },
-      { id: 29, name: '车茂林', gender: '男', age: 68, avatar: '👴', generation: 0 },
-      { id: 30, name: '车南征', gender: '女', age: 65, avatar: '👵', generation: 0 },
-      { id: 31, name: '车方华', gender: '男', age: 45, avatar: '👨', generation: 1 }
-    ],
-    links: [
-      { source: 1, target: 3, relation: '父子' },
-      { source: 2, target: 3, relation: '母子' },
-      { source: 1, target: 4, relation: '父女' },
-      { source: 2, target: 4, relation: '母女' },
-      { source: 3, target: 5, relation: '父子' },
-      { source: 4, target: 5, relation: '母子' },
-      { source: 3, target: 6, relation: '父子' },
-      { source: 4, target: 6, relation: '母子' },
-      { source: 3, target: 7, relation: '父女' },
-      { source: 4, target: 7, relation: '母女' },
-      { source: 5, target: 8, relation: '父子' },
-      { source: 5, target: 9, relation: '父女' },
-      { source: 6, target: 10, relation: '父子' },
-      { source: 6, target: 11, relation: '父女' },
-      { source: 12, target: 14, relation: '父子' },
-      { source: 13, target: 14, relation: '母子' },
-      { source: 12, target: 15, relation: '父女' },
-      { source: 13, target: 15, relation: '母女' },
-      { source: 14, target: 16, relation: '父子' },
-      { source: 15, target: 16, relation: '母子' },
-      { source: 14, target: 17, relation: '父女' },
-      { source: 15, target: 17, relation: '母女' },
-      { source: 16, target: 18, relation: '父子' },
-      { source: 16, target: 19, relation: '父女' },
-      { source: 18, target: 20, relation: '父子' },
-      { source: 21, target: 23, relation: '父子' },
-      { source: 22, target: 23, relation: '母子' },
-      { source: 21, target: 24, relation: '父女' },
-      { source: 22, target: 24, relation: '母女' },
-      { source: 23, target: 25, relation: '父子' },
-      { source: 24, target: 25, relation: '母子' },
-      { source: 23, target: 26, relation: '父女' },
-      { source: 24, target: 26, relation: '母女' },
-      { source: 25, target: 27, relation: '父子' },
-      { source: 25, target: 28, relation: '父女' },
-      { source: 29, target: 31, relation: '父子' },
-      { source: 30, target: 31, relation: '母子' }
-    ]
-  },
+  relationshipNetwork: (function() {
+    const nodes = []
+    const links = []
+    const surnames = ['张', '王', '李', '赵', '陈', '刘', '杨', '黄', '周', '吴']
+    const maleNames = ['伟', '强', '磊', '军', '洋', '勇', '军', '杰', '涛', '明', '华', '平', '刚', '桂', '贵', '福', '祥', '文', '武', '永', '茂', '南', '方']
+    const femaleNames = ['芳', '娜', '秀英', '敏', '静', '丽', '娟', '燕', '霞', '秀', '玲', '桂英', '美', '玲', '莉', '红', '春', '梅', '兰', '凤', '云', '雪', '琴']
+    const maleAvatars = ['👴', '👨', '👱', '👦']
+    const femaleAvatars = ['👵', '👩', '👧']
+    
+    // 生成1000个节点
+    for (let i = 1; i <= 1000; i++) {
+      const generation = Math.floor(Math.log2(i))
+      const gender = Math.random() > 0.5 ? '男' : '女'
+      const surname = surnames[Math.floor(Math.random() * surnames.length)]
+      const nameList = gender === '男' ? maleNames : femaleNames
+      const name = nameList[Math.floor(Math.random() * nameList.length)]
+      const avatarList = gender === '男' ? maleAvatars : femaleAvatars
+      const avatar = avatarList[Math.min(generation, avatarList.length - 1)]
+      const baseAge = 80 - generation * 15
+      const age = Math.max(5, baseAge + Math.floor(Math.random() * 10))
+      
+      nodes.push({
+        id: i,
+        name: surname + name,
+        gender: gender,
+        age: age,
+        avatar: avatar,
+        generation: generation
+      })
+      
+      // 生成连接线（除了根节点）
+      if (i > 1) {
+        const parentId = Math.floor(i / 2)
+        const relation = gender === '男' ? '父子' : '父女'
+        links.push({
+          source: parentId,
+          target: i,
+          relation: relation
+        })
+      }
+    }
+    
+    return {
+      nodes: nodes,
+      links: links
+    }
+  })(),
   photos: [
     {
       id: 1,

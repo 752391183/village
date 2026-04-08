@@ -82,7 +82,6 @@
             <div class="toolbar-info">
               <span>镜头 {{ Math.round(zoomLevel * 100) }}%</span>
               <span>显示 {{ visibleNodes.length }} 人</span>
-              <span>关系 {{ visibleLinks.length }} 条</span>
             </div>
             <div class="zoom-controls">
               <button @click="zoomIn" class="zoom-btn" title="放大">+</button>
@@ -96,7 +95,6 @@
           <div class="network-shell-glow glow-left"></div>
           <div class="network-shell-glow glow-right"></div>
           <div class="network-watermark">族谱树</div>
-          <div class="network-guide-chip">横向滚动查看完整谱系，点击节点查看关系</div>
           <div
             class="network-container"
             ref="containerRef"
@@ -211,28 +209,6 @@
           <div class="network-edge-mask bottom"></div>
         </div>
       </div>
-      <div class="legend-section">
-        <div class="legend-item">
-          <span class="legend-dot male"></span>
-          <span>男性</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-dot female"></span>
-          <span>女性</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-dot queried"></span>
-          <span>查询对象</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-dot selected"></span>
-          <span>当前选中</span>
-        </div>
-        <div class="legend-item">
-          <span class="legend-dot search-result"></span>
-          <span>搜索结果</span>
-        </div>
-      </div>
 
       <div class="tips-section">
         <div class="tips-card">
@@ -296,6 +272,7 @@ export default {
       hasQueried: false,
       queriedIds: new Set(),
       searchResultIds: new Set(),
+      highlightedPathIds: new Set(),
       hoveredNode: null,
       zoomLevel: 1,
       baseNodeWidth: 168,
@@ -385,6 +362,7 @@ export default {
     handleSearch() {
       if (!this.searchName.trim()) {
         this.searchResultIds.clear()
+        this.highlightedPathIds.clear()
         return
       }
 
@@ -395,6 +373,14 @@ export default {
 
         if (searchResults.length > 0) {
           this.searchResultIds = new Set(searchResults.map(node => node.id))
+          
+          // 收集完整的祖先链路
+          this.highlightedPathIds = new Set()
+          searchResults.forEach(node => {
+            this.highlightedPathIds.add(node.id)
+            // 添加所有祖先节点
+            this.addAllAncestorsToPath(node.id, this.highlightedPathIds)
+          })
 
           // 确保搜索结果和相关节点都可见
           const allRelatedNodeIds = new Set(this.searchResultIds)
@@ -428,10 +414,20 @@ export default {
         } else {
           alert('未找到该人员，请检查姓名是否正确')
           this.searchResultIds.clear()
+          this.highlightedPathIds.clear()
         }
 
         this.isLoading = false
       }, 300)
+    },
+    addAllAncestorsToPath(nodeId, pathSet) {
+      const parents = this.getParents(nodeId)
+      parents.forEach(parent => {
+        if (!pathSet.has(parent.id)) {
+          pathSet.add(parent.id)
+          this.addAllAncestorsToPath(parent.id, pathSet)
+        }
+      })
     },
     getRelatedNodes(nodeId) {
       const relatedNodes = []
@@ -703,7 +699,8 @@ export default {
       return 'url(#femaleGradient)'
     },
     isNodeHighlighted(node) {
-      if (this.searchResultIds.has(node.id)) return true
+      // 搜索结果的完整祖先链路高亮
+      if (this.highlightedPathIds.has(node.id)) return true
       if (this.hoveredNode) {
         return this.visibleLinks.some(link =>
           (link.source === this.hoveredNode.id && link.target === node.id) ||
@@ -719,8 +716,8 @@ export default {
       )
     },
     isLinkHighlighted(link) {
-      // 搜索结果相关联的连接线高亮
-      if (this.searchResultIds.has(link.source) || this.searchResultIds.has(link.target)) {
+      // 搜索结果的完整祖先链路高亮
+      if (this.highlightedPathIds.has(link.source) && this.highlightedPathIds.has(link.target)) {
         return true
       }
 
@@ -1288,28 +1285,16 @@ export default {
   position: relative;
   padding: 24px;
   border-radius: 28px;
-  background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.2) 34%),
-    linear-gradient(180deg, #f9f5ee 0%, #f5efe6 42%, #f2ebdf 100%);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid rgba(226, 232, 240, 1);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 400px;
 }
 
-.network-stage::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.5), transparent 85%);
-  pointer-events: none;
-}
+
 
 .network-stage-head {
   position: relative;
@@ -1329,7 +1314,7 @@ export default {
   display: inline-block;
   font-size: 11px;
   letter-spacing: 0.28em;
-  color: #8a6f44;
+  color: #64748b;
   margin-bottom: 10px;
 }
 
@@ -1337,13 +1322,13 @@ export default {
   margin: 0;
   font-size: 40px;
   line-height: 1;
-  color: #2f2618;
+  color: #1e293b;
   text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.92);
 }
 
 .network-stage-copy p {
   margin: 12px 0 0;
-  color: #8d836f;
+  color: #64748b;
   line-height: 1.7;
   font-size: 14px;
 }
@@ -1355,14 +1340,14 @@ export default {
   gap: 12px;
   padding: 16px 18px;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(226, 219, 208, 0.96);
-  box-shadow: 0 8px 18px rgba(193, 186, 174, 0.16);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(226, 232, 240, 1);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   backdrop-filter: blur(10px);
 }
 
 .toolbar:hover {
-  box-shadow: 0 18px 32px rgba(148, 163, 184, 0.22);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
 }
 
 .toolbar-info {
@@ -1371,30 +1356,19 @@ export default {
   justify-content: flex-end;
   gap: 10px;
   font-size: 13px;
-  color: #7d7361;
+  color: #64748b;
 }
 
 .toolbar-info span {
   padding: 7px 14px;
-  background: #fffdfa;
-  border: 1px solid rgba(226, 219, 208, 0.96);
+  background: #f8fafc;
+  border: 1px solid rgba(226, 232, 240, 1);
   border-radius: 999px;
   font-weight: 600;
 }
 
 .toolbar-info span:hover {
-  background: rgba(255, 250, 240, 0.96);
-}
-
-/* 族谱树标题描边效果 */
-.network-stage-copy h2 {
-  margin: 0;
-  font-size: 40px;
-  line-height: 1;
-  color: #2F2618;
-  font-weight: 900;
-  -webkit-text-stroke: 2px #FFFFFF;
-  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  background: #f1f5f9;
 }
 
 .zoom-controls {
@@ -1438,11 +1412,8 @@ export default {
 .network-shell {
   position: relative;
   z-index: 1;
-  padding: 18px;
-  border-radius: 26px;
   overflow: hidden;
-  background: linear-gradient(180deg, #f8f5ef 0%, #f6f2ea 100%);
-  border: 1px solid rgba(225, 218, 207, 0.92);
+  border: 1px solid #f0f4ff;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
   flex: 1;
   display: flex;
@@ -1472,9 +1443,7 @@ export default {
   flex: 0 0 auto;
   width: 100%;
   height: var(--network-viewport-height);
-  border-radius: 24px;
   border: 1px solid rgba(226, 219, 208, 0.96);
-  background: #fffdfa;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.98);
   cursor: grab;
   overscroll-behavior: contain;
@@ -1504,7 +1473,7 @@ export default {
   min-height: 100%;
   display: block;
   padding: 30px 44px 40px;
-  background: #fffdfa;
+  background: transparent;
   transition: transform 0.1s ease;
   transform-origin: 0 0; /* 极其重要：确保缩放和位移基准点一致 */
 }
@@ -1575,67 +1544,6 @@ export default {
   font-size: 11px;
   fill: #A0AEC0;
   pointer-events: none;
-}
-.legend-section {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 20px;
-  padding: 16px;
-  background: white;
-  border-radius: 16px;
-  margin-top: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-  transition: all 0.3s ease;
-}
-
-.legend-section:hover {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: #666;
-  transition: all 0.3s ease;
-}
-
-.legend-item:hover {
-  color: #002fa7;
-  transform: translateY(-2px);
-}
-
-.legend-dot {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  transition: all 0.3s ease;
-}
-
-.legend-item:hover .legend-dot {
-  transform: scale(1.2);
-}
-
-.legend-dot.queried {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-}
-
-.legend-dot.male {
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-}
-
-.legend-dot.female {
-  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-}
-
-.legend-dot.selected {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-.legend-dot.search-result {
-  background: linear-gradient(135deg, #f97316 0%, #fb923c 100%);
 }
 
 .tips-section {
@@ -1940,8 +1848,6 @@ export default {
 
   .network-shell {
     --network-viewport-height: clamp(360px, 58vh, 520px);
-    padding: 5px;
-    border-radius: 12px;
   }
 
   .network-watermark {
@@ -1951,7 +1857,6 @@ export default {
   .network-container {
     height: var(--network-viewport-height);
     max-height: none;
-    border-radius: 10px;
   }
 
   .info-panel {
